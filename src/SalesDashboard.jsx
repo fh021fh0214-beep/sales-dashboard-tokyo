@@ -69,6 +69,9 @@ export default function Dashboard(){
   const [sortAsc,setSortAsc]=useState(true);
   const [nbFact,setNbFact]=useState("全工場");
   const [nbSrch,setNbSrch]=useState("");
+  const [srchMem,setSrchMem]=useState("全担当者");
+  const [srchNbPb,setSrchNbPb]=useState("NB/PB全て");
+  const [srchLyMonth,setSrchLyMonth]=useState("累計");
 
   const tgtM=selMonth==="累計"?CUM_M:[selMonth];
   const isGP=metric==="粗利";
@@ -158,9 +161,24 @@ export default function Dashboard(){
       if(!tM.includes(r.月))return false;
       if(sc&&!r.得意先?.toLowerCase().includes(sc))return false;
       if(sp&&!r.品名?.toLowerCase().includes(sp)&&!r.品番?.toLowerCase().includes(sp))return false;
+      if(srchMem!=="全担当者"&&r.担当者!==srchMem)return false;
+      if(srchNbPb!=="NB/PB全て"&&r.NB_PB!==srchNbPb)return false;
       return true;
     });
-  },[srchCli,srchProd,srchMonth]);
+  },[srchCli,srchProd,srchMonth,srchMem,srchNbPb]);
+
+  const lyLookup=useMemo(()=>{
+    const map={};
+    const tM=srchLyMonth==="累計"?CUM_M:[srchLyMonth];
+    for(const r of AGG_LY){
+      if(!tM.includes(r.月))continue;
+      const k=r.担当者+"||"+r.得意先+"||"+r.カテゴリ+"||"+r.NB_PB;
+      if(!map[k])map[k]={売上:0,粗利:0};
+      map[k].売上+=r.売上;
+      map[k].粗利+=r.粗利;
+    }
+    return map;
+  },[srchLyMonth]);
 
   const sortedRes=useMemo(()=>[...srchRes].sort((a,b)=>{
     const av=a[sortCol],bv=b[sortCol];
@@ -234,6 +252,7 @@ export default function Dashboard(){
         </div>
         {/* 検索ボタン行 */}
         <div style={{display:"flex",gap:5,alignItems:"center",marginBottom:7}}>
+          <button onClick={()=>setView("overview")} style={{padding:"5px 12px",borderRadius:8,border:`1px solid ${C.budget}`,background:view!=="search"&&view!=="nb"?C.budget:"transparent",color:view!=="search"&&view!=="nb"?"#000":C.budget,fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>📊 DB</button>
           <button onClick={()=>setView("search")} style={{padding:"5px 12px",borderRadius:8,border:`1px solid ${C.accent}`,background:view==="search"?C.accent:"transparent",color:view==="search"?"#000":C.accent,fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>🔎 検索</button>
           <button onClick={()=>setView("nb")} style={{padding:"5px 12px",borderRadius:8,border:`1px solid ${C.gp}`,background:view==="nb"?C.gp:"transparent",color:view==="nb"?"#000":C.gp,fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>📋 NB情報</button>
         </div>
@@ -247,7 +266,7 @@ export default function Dashboard(){
       </div>
 
       {/* KPIカード */}
-      <div style={{display:"flex",gap:6,marginBottom:9,flexWrap:"wrap"}}>
+      {view!=="search"&&view!=="nb"&&<div style={{display:"flex",gap:6,marginBottom:9,flexWrap:"wrap"}}>
         <KPICard label={kpiLabel} value={`${fmt(kpiVal)}円`} icon={isGP?"💹":"💰"}
           color={kpiColor} sub={`前年 ${fmt(kpiLast)}円`}
           note={`前年比 ${kpiYoy>=0?"+":""}${kpiYoy}%`}/>
@@ -265,16 +284,16 @@ export default function Dashboard(){
         {isGP&&<KPICard label="売上（参考）" value={`${fmt(tySales)}円`} icon="💰"
           color={C.accent} sub={`粗利率 ${gpRate(tyGP,tySales)}%`}
           note={`前年比 ${pct(tySales,lySales)>=0?"+":""}${pct(tySales,lySales)}%`}/>}
-      </div>
+      </div>}
 
       {/* タブ */}
-      <div style={{display:"flex",gap:5,marginBottom:9,overflowX:"auto",paddingBottom:2}}>
+      {view!=="search"&&view!=="nb"&&<div style={{display:"flex",gap:5,marginBottom:9,overflowX:"auto",paddingBottom:2}}>
         <TabBtn id="overview"   label="月別推移"/>
         <TabBtn id="cumulative" label="累計推移"/>
         <TabBtn id="member"     label="担当者別"/>
         <TabBtn id="client"     label="得意先別"/>
         <TabBtn id="category"   label="カテゴリ別"/>
-      </div>
+      </div>}
 
       {/* 月別推移 */}
       {view==="overview"&&(
@@ -578,6 +597,11 @@ export default function Dashboard(){
         <div style={{display:"flex",flexDirection:"column",gap:9}}>
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:13}}>
             <div style={{fontSize:12,fontWeight:600,marginBottom:10,color:C.muted}}>🔎 得意先・商品 検索（今年実績）</div>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:6}}>
+              <div><div style={{fontSize:10,color:C.muted,marginBottom:3}}>担当者</div><select value={srchMem} onChange={e=>setSrchMem(e.target.value)} style={{background:C.bg,color:C.text,border:`1px solid ${C.border}`,borderRadius:7,padding:"5px 8px",fontSize:11}}><option>全担当者</option>{ALL_MEM.map(m=><option key={m}>{m}</option>)}</select></div>
+              <div><div style={{fontSize:10,color:C.muted,marginBottom:3}}>NB/PB</div><select value={srchNbPb} onChange={e=>setSrchNbPb(e.target.value)} style={{background:C.bg,color:C.text,border:`1px solid ${C.border}`,borderRadius:7,padding:"5px 8px",fontSize:11}}><option>NB/PB全て</option><option>NB</option><option>PB</option></select></div>
+              <div><div style={{fontSize:10,color:C.muted,marginBottom:3}}>前年比較月</div><select value={srchLyMonth} onChange={e=>setSrchLyMonth(e.target.value)} style={{background:C.bg,color:C.text,border:`1px solid ${C.border}`,borderRadius:7,padding:"5px 8px",fontSize:11}}><option>累計</option>{MONTHS.map(m=><option key={m}>{m}</option>)}</select></div>
+            </div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
               <div style={{flex:1,minWidth:120}}>
                 <div style={{fontSize:10,color:C.muted,marginBottom:4}}>請求先名</div>
@@ -623,7 +647,7 @@ export default function Dashboard(){
                     <table style={{width:"100%",borderCollapse:"collapse",minWidth:500}}>
                       <thead>
                         <tr style={{background:C.bg}}>
-                          {[{key:"日付",label:"出荷日"},{key:"得意先",label:"請求先名"},{key:"品番",label:"品番"},{key:"品名",label:"品名"},{key:"売上",label:"売上"},{key:"粗利",label:"粗利"},{key:"単価",label:"単価"},{key:"数量",label:"数量"}].map(col=>(
+                          {[{key:"日付",label:"出荷日"},{key:"得意先",label:"請求先名"},{key:"品番",label:"品番"},{key:"品名",label:"品名"},{key:"売上",label:"売上"},{key:"粗利",label:"粗利"},{key:"単価",label:"単価"},{key:"数量",label:"数量"},{key:"前年比",label:"前年比",noSort:true}].map(col=>(
                             <th key={col.key} onClick={()=>handleSort(col.key)} style={{...thS,color:sortCol===col.key?C.accent:C.muted}}>
                               {col.label}{sortCol===col.key?(sortAsc?"▲":"▼"):""}
                             </th>
@@ -648,6 +672,7 @@ export default function Dashboard(){
                             <td style={{...tdS,color:C.gp,fontWeight:600,textAlign:"right",whiteSpace:"nowrap"}}>{(r.粗利||0).toLocaleString()}円</td>
                             <td style={{...tdS,textAlign:"right",color:C.muted,whiteSpace:"nowrap"}}>{(r.単価||0).toLocaleString()}円</td>
                             <td style={{...tdS,textAlign:"right",color:C.muted}}>{r.数量||0}</td>
+                             {(()=>{const k=r.担当者+"||"+r.得意先+"||"+r.カテゴリ+"||"+r.NB_PB;const ly=lyLookup[k];const yoy=ly&&ly.売上>0?Math.round(r.売上/ly.売上*100-100):null;return<td style={{...tdS,textAlign:"right",fontWeight:600,color:yoy===null?C.muted:yoy>=0?C.up:C.down,whiteSpace:"nowrap"}}>{yoy===null?"―":(yoy>=0?"+":"")+yoy+"%"}</td>;})()}
                           </tr>
                         ))}
                       </tbody>
