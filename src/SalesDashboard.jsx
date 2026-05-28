@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+﻿import { useState, useMemo } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
 
 const MONTHS   = ["4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "1月", "2月", "3月"];
@@ -170,7 +170,7 @@ export default function Dashboard(){
 
   const lyLookup=useMemo(()=>{
     const map={};
-    const tM=srchLyMonth==="累計"?MONTH_ORDER:[srchLyMonth];
+    const tM=srchLyMonth==="累計"?MONTHS:[srchLyMonth];
     const sc=srchCli.trim().toLowerCase();
     for(const r of AGG_LY){
       if(!tM.includes(r.月))continue;
@@ -195,7 +195,7 @@ export default function Dashboard(){
       map[key].数量+=r.数量||0;
     }
     return Object.values(map).sort((a,b)=>{
-      const mi=MONTH_ORDER.indexOf(a.月)-MONTH_ORDER.indexOf(b.月);
+      const mi=MONTHS.indexOf(a.月)-MONTHS.indexOf(b.月);
       return mi!==0?mi:b.売上-a.売上;
     });
   },[srchRes]);
