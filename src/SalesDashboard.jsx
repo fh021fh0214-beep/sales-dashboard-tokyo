@@ -155,7 +155,8 @@ export default function Dashboard(){
 
   const srchRes=useMemo(()=>{
     const sc=srchCli.trim().toLowerCase(),sp=srchProd.trim().toLowerCase();
-    if(!sc&&!sp)return[];
+    const hasFilter=sc||sp||srchMem!=="全担当者"||srchNbPb!=="NB/PB全て"||srchLyMonth!=="累計";
+    if(!hasFilter)return[];
     const tM=srchMonth==="累計"?CUM_M:[srchMonth];
     return DET_TY.filter(r=>{
       if(!tM.includes(r.月))return false;
@@ -169,16 +170,35 @@ export default function Dashboard(){
 
   const lyLookup=useMemo(()=>{
     const map={};
-    const tM=srchLyMonth==="累計"?CUM_M:[srchLyMonth];
+    const tM=srchLyMonth==="累計"?MONTH_ORDER:[srchLyMonth];
+    const sc=srchCli.trim().toLowerCase();
     for(const r of AGG_LY){
       if(!tM.includes(r.月))continue;
+      if(srchMem!=="全担当者"&&r.担当者!==srchMem)continue;
+      if(srchNbPb!=="NB/PB全て"&&r.NB_PB!==srchNbPb)continue;
+      if(sc&&!r.得意先?.toLowerCase().includes(sc))continue;
       const k=r.担当者+"||"+r.得意先+"||"+r.カテゴリ+"||"+r.NB_PB;
       if(!map[k])map[k]={売上:0,粗利:0};
       map[k].売上+=r.売上;
       map[k].粗利+=r.粗利;
     }
     return map;
-  },[srchLyMonth]);
+  },[srchLyMonth,srchMem,srchNbPb,srchCli]);
+
+  const aggRes=useMemo(()=>{
+    const map={};
+    for(const r of srchRes){
+      const key=r.月+"||"+r.品番+"||"+r.品名+"||"+r.担当者+"||"+r.得意先;
+      if(!map[key])map[key]={月:r.月,品番:r.品番,品名:r.品名,カテゴリ:r.カテゴリ,NB_PB:r.NB_PB,担当者:r.担当者,得意先:r.得意先,売上:0,粗利:0,数量:0};
+      map[key].売上+=r.売上||0;
+      map[key].粗利+=r.粗利||0;
+      map[key].数量+=r.数量||0;
+    }
+    return Object.values(map).sort((a,b)=>{
+      const mi=MONTH_ORDER.indexOf(a.月)-MONTH_ORDER.indexOf(b.月);
+      return mi!==0?mi:b.売上-a.売上;
+    });
+  },[srchRes]);
 
   const sortedRes=useMemo(()=>[...srchRes].sort((a,b)=>{
     const av=a[sortCol],bv=b[sortCol];
@@ -623,44 +643,51 @@ export default function Dashboard(){
               </div>
             </div>
           </div>
-          {(srchCli.trim()||srchProd.trim())?(()=>{
-            const tA=sortedRes.reduce((s,r)=>s+(r.売上||0),0);
-            const tQ=sortedRes.reduce((s,r)=>s+(r.数量||0),0);
-            const tG=sortedRes.reduce((s,r)=>s+(r.粗利||0),0);
+          {srchRes.length>0?(()=>{
+            const tA=aggRes.reduce((s,r)=>s+(r.売上||0),0);
+            const tQ=aggRes.reduce((s,r)=>s+(r.数量||0),0);
+            const tG=aggRes.reduce((s,r)=>s+(r.粗利||0),0);
+            const lyA=Object.values(lyLookup).reduce((s,r)=>s+(r.売上||0),0);
+            const lyG=Object.values(lyLookup).reduce((s,r)=>s+(r.粗利||0),0);
+            const yoyTotal=lyA>0?Math.round(tA/lyA*100-100):null;
             return(
               <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:13}}>
                 <div style={{fontSize:11,fontWeight:600,color:C.muted,marginBottom:7}}>
-                  検索結果 <span style={{color:C.accent}}>{sortedRes.length}件</span>
-                  <span style={{fontSize:10,fontWeight:400,marginLeft:8}}>{srchMonth}</span>
+                  集計結果 <span style={{color:C.accent}}>{aggRes.length}製品</span>
+                  <span style={{fontSize:10,fontWeight:400,marginLeft:8}}>{srchMonth}｜前年比較：{srchLyMonth}</span>
                 </div>
                 <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
-                  {[{label:"💰 売上合計",val:fmt(tA)+"円",color:C.accent},{label:"📦 数量合計",val:tQ.toLocaleString(),color:C.accent},{label:"💹 粗利合計",val:fmt(tG)+"円",color:C.gp}].map(item=>(
+                  {[
+                    {label:"💰 今年売上",val:fmt(tA)+"円",sub:`前年 ${fmt(lyA)}円`,color:C.accent},
+                    {label:"💹 今年粗利",val:fmt(tG)+"円",sub:`前年 ${fmt(lyG)}円`,color:C.gp},
+                    {label:"📦 数量合計",val:tQ.toLocaleString(),sub:"",color:C.accent},
+                    {label:"📈 前年比",val:yoyTotal===null?"―":(yoyTotal>=0?"+":"")+yoyTotal+"%",sub:"",color:yoyTotal===null?C.muted:yoyTotal>=0?C.up:C.down},
+                  ].map(item=>(
                     <div key={item.label} style={{flex:1,minWidth:100,background:C.bg,borderRadius:8,padding:"9px 10px"}}>
                       <div style={{fontSize:9,color:C.muted,marginBottom:3}}>{item.label}</div>
                       <div style={{fontSize:14,fontWeight:700,color:item.color}}>{item.val}</div>
+                      {item.sub&&<div style={{fontSize:9,color:C.muted,marginTop:2}}>{item.sub}</div>}
                     </div>
                   ))}
                 </div>
-                <div style={{fontSize:9,color:C.muted,marginBottom:6}}>💡 請求先名・品名をタップすると検索枠に反映されます</div>
-                {sortedRes.length===0?<div style={{textAlign:"center",color:C.muted,fontSize:12,padding:"20px 0"}}>該当データなし</div>:(
-                  <div style={{overflowX:"auto"}}>
-                    <table style={{width:"100%",borderCollapse:"collapse",minWidth:500}}>
-                      <thead>
-                        <tr style={{background:C.bg}}>
-                          {[{key:"日付",label:"出荷日"},{key:"得意先",label:"請求先名"},{key:"品番",label:"品番"},{key:"品名",label:"品名"},{key:"売上",label:"売上"},{key:"粗利",label:"粗利"},{key:"単価",label:"単価"},{key:"数量",label:"数量"},{key:"前年比",label:"前年比",noSort:true}].map(col=>(
-                            <th key={col.key} onClick={()=>handleSort(col.key)} style={{...thS,color:sortCol===col.key?C.accent:C.muted}}>
-                              {col.label}{sortCol===col.key?(sortAsc?"▲":"▼"):""}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sortedRes.map((r,i)=>(
+                <div style={{fontSize:9,color:C.muted,marginBottom:6}}>💡 品番・品名・請求先をタップすると検索枠に反映されます</div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",minWidth:620}}>
+                    <thead>
+                      <tr style={{background:C.bg}}>
+                        {["月","品番","品名／カテゴリ","得意先","今年売上","前年売上","今年粗利","前年粗利","前年比","数量"].map(h=>(
+                          <th key={h} style={{...thS,color:C.muted}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {aggRes.map((r,i)=>{
+                        const k=r.担当者+"||"+r.得意先+"||"+r.カテゴリ+"||"+r.NB_PB;
+                        const ly=lyLookup[k];
+                        const yoy=ly&&ly.売上>0?Math.round(r.売上/ly.売上*100-100):null;
+                        return(
                           <tr key={i} style={{background:i%2===0?"transparent":C.bg+"80"}}>
-                            <td style={{...tdS,color:C.muted,whiteSpace:"nowrap"}}>{r.日付}</td>
-                            <td style={{...tdS,cursor:"pointer"}} onClick={()=>setSrchCli(r.得意先)}>
-                              <span style={{borderBottom:`1px dashed ${C.accent}66`,fontSize:10}}>{r.得意先}</span>
-                            </td>
+                            <td style={{...tdS,color:C.muted,whiteSpace:"nowrap",fontWeight:600}}>{r.月}</td>
                             <td style={{...tdS,color:C.accent3,whiteSpace:"nowrap",cursor:"pointer"}} onClick={()=>setSrchProd(r.品番)}>
                               <span style={{borderBottom:`1px dashed ${C.accent3}66`}}>{r.品番}</span>
                             </td>
@@ -668,22 +695,26 @@ export default function Dashboard(){
                               <div style={{fontSize:10,borderBottom:`1px dashed ${C.accent}66`,display:"inline"}}>{r.品名}</div>
                               <div style={{fontSize:9,color:C.muted}}>{r.カテゴリ} / <span style={{color:r.NB_PB==="NB"?C.accent:C.accent3}}>{r.NB_PB}</span></div>
                             </td>
+                            <td style={{...tdS,cursor:"pointer",fontSize:10}} onClick={()=>setSrchCli(r.得意先)}>
+                              <span style={{borderBottom:`1px dashed ${C.accent}66`}}>{r.得意先}</span>
+                            </td>
                             <td style={{...tdS,color:C.accent,fontWeight:700,textAlign:"right",whiteSpace:"nowrap"}}>{(r.売上||0).toLocaleString()}円</td>
+                            <td style={{...tdS,color:C.muted,textAlign:"right",whiteSpace:"nowrap"}}>{ly?ly.売上.toLocaleString()+"円":"―"}</td>
                             <td style={{...tdS,color:C.gp,fontWeight:600,textAlign:"right",whiteSpace:"nowrap"}}>{(r.粗利||0).toLocaleString()}円</td>
-                            <td style={{...tdS,textAlign:"right",color:C.muted,whiteSpace:"nowrap"}}>{(r.単価||0).toLocaleString()}円</td>
+                            <td style={{...tdS,color:C.muted,textAlign:"right",whiteSpace:"nowrap"}}>{ly?ly.粗利.toLocaleString()+"円":"―"}</td>
+                            <td style={{...tdS,textAlign:"right",fontWeight:700,color:yoy===null?C.muted:yoy>=0?C.up:C.down,whiteSpace:"nowrap"}}>{yoy===null?"―":(yoy>=0?"+":"")+yoy+"%"}</td>
                             <td style={{...tdS,textAlign:"right",color:C.muted}}>{r.数量||0}</td>
-                             {(()=>{const k=r.担当者+"||"+r.得意先+"||"+r.カテゴリ+"||"+r.NB_PB;const ly=lyLookup[k];const yoy=ly&&ly.売上>0?Math.round(r.売上/ly.売上*100-100):null;return<td style={{...tdS,textAlign:"right",fontWeight:600,color:yoy===null?C.muted:yoy>=0?C.up:C.down,whiteSpace:"nowrap"}}>{yoy===null?"―":(yoy>=0?"+":"")+yoy+"%"}</td>;})()}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             );
           })():(
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:20,textAlign:"center",color:C.muted,fontSize:12}}>
-              請求先名または品名・品番を入力して検索してください
+              担当者・NB/PB・検索キーワードのいずれかを選択・入力してください
             </div>
           )}
         </div>
