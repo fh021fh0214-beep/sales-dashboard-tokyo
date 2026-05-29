@@ -1,4 +1,4 @@
-﻿import { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
 
 const MONTHS   = ["4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "1月", "2月", "3月"];
@@ -154,7 +154,7 @@ export default function Dashboard(){
 
   const srchRes=useMemo(()=>{
     const sc=srchCli.trim().toLowerCase(),sp=srchProd.trim().toLowerCase();
-    const hasFilter=sc||sp||srchMem!=="全担当者"||srchNbPb!=="NB/PB全て"||srchLyMonth!=="累計";
+    const hasFilter=sc||sp||srchMem!=="全担当者"||srchNbPb!=="NB/PB全て";
     if(!hasFilter)return[];
     const tM=srchMonth==="累計"?CUM_M:[srchMonth];
     return DET_TY.filter(r=>{
@@ -653,7 +653,7 @@ export default function Dashboard(){
               <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:13}}>
                 <div style={{fontSize:11,fontWeight:600,color:C.muted,marginBottom:7}}>
                   集計結果 <span style={{color:C.accent}}>{aggRes.length}製品</span>
-                  <span style={{fontSize:10,fontWeight:400,marginLeft:8}}>{srchMonth}｜前年比較：{srchLyMonth}</span>
+                  <span style={{fontSize:10,fontWeight:400,marginLeft:8}}>{srchMonth}</span>
                 </div>
                 <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
                   {[
