@@ -71,7 +71,6 @@ export default function Dashboard(){
   const [nbSrch,setNbSrch]=useState("");
   const [srchMem,setSrchMem]=useState("全担当者");
   const [srchNbPb,setSrchNbPb]=useState("NB/PB全て");
-  const [srchLyMonth,setSrchLyMonth]=useState("累計");
 
   const tgtM=selMonth==="累計"?CUM_M:[selMonth];
   const isGP=metric==="粗利";
@@ -170,7 +169,7 @@ export default function Dashboard(){
 
   const lyLookup=useMemo(()=>{
     const map={};
-    const tM=srchLyMonth==="累計"?MONTHS:[srchLyMonth];
+    const tM=srchMonth==="累計"?CUM_M:[srchMonth];
     const sc=srchCli.trim().toLowerCase();
     for(const r of AGG_LY){
       if(!tM.includes(r.月))continue;
@@ -183,7 +182,7 @@ export default function Dashboard(){
       map[k].粗利+=r.粗利;
     }
     return map;
-  },[srchLyMonth,srchMem,srchNbPb,srchCli]);
+  },[srchMonth,srchMem,srchNbPb,srchCli]);
 
   const aggRes=useMemo(()=>{
     const map={};
@@ -620,7 +619,7 @@ export default function Dashboard(){
             <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:6}}>
               <div><div style={{fontSize:10,color:C.muted,marginBottom:3}}>担当者</div><select value={srchMem} onChange={e=>setSrchMem(e.target.value)} style={{background:C.bg,color:C.text,border:`1px solid ${C.border}`,borderRadius:7,padding:"5px 8px",fontSize:11}}><option>全担当者</option>{ALL_MEM.map(m=><option key={m}>{m}</option>)}</select></div>
               <div><div style={{fontSize:10,color:C.muted,marginBottom:3}}>NB/PB</div><select value={srchNbPb} onChange={e=>setSrchNbPb(e.target.value)} style={{background:C.bg,color:C.text,border:`1px solid ${C.border}`,borderRadius:7,padding:"5px 8px",fontSize:11}}><option>NB/PB全て</option><option>NB</option><option>PB</option></select></div>
-              <div><div style={{fontSize:10,color:C.muted,marginBottom:3}}>前年比較月</div><select value={srchLyMonth} onChange={e=>setSrchLyMonth(e.target.value)} style={{background:C.bg,color:C.text,border:`1px solid ${C.border}`,borderRadius:7,padding:"5px 8px",fontSize:11}}><option>累計</option>{MONTHS.map(m=><option key={m}>{m}</option>)}</select></div>
+              
             </div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
               <div style={{flex:1,minWidth:120}}>
