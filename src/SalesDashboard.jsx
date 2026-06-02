@@ -675,7 +675,7 @@ export default function Dashboard(){
                   <table style={{width:"100%",borderCollapse:"collapse",minWidth:620}}>
                     <thead>
                       <tr style={{background:C.bg}}>
-                        {["月","品番","品名／カテゴリ","得意先","今年売上","前年売上","今年粗利","前年粗利","前年比","数量"].map(h=>(
+                        {["月","品番","品名／カテゴリ","得意先","今年売上","前年売上","今年粗利","前年粗利","粗利率","前年比","数量"].map(h=>(
                           <th key={h} style={{...thS,color:C.muted}}>{h}</th>
                         ))}
                       </tr>
@@ -702,6 +702,7 @@ export default function Dashboard(){
                             <td style={{...tdS,color:C.muted,textAlign:"right",whiteSpace:"nowrap"}}>{ly?ly.売上.toLocaleString()+"円":"―"}</td>
                             <td style={{...tdS,color:C.gp,fontWeight:600,textAlign:"right",whiteSpace:"nowrap"}}>{(r.粗利||0).toLocaleString()}円</td>
                             <td style={{...tdS,color:C.muted,textAlign:"right",whiteSpace:"nowrap"}}>{ly?ly.粗利.toLocaleString()+"円":"―"}</td>
+                            <td style={{...tdS,textAlign:"right",fontWeight:600,color:C.gp,whiteSpace:"nowrap"}}>{r.売上>0?(Math.round(r.粗利/r.売上*1000)/10)+"%":"―"}</td>
                             <td style={{...tdS,textAlign:"right",fontWeight:700,color:yoy===null?C.muted:yoy>=0?C.up:C.down,whiteSpace:"nowrap"}}>{yoy===null?"―":(yoy>=0?"+":"")+yoy+"%"}</td>
                             <td style={{...tdS,textAlign:"right",color:C.muted}}>{r.数量||0}</td>
                           </tr>
