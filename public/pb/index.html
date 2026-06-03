@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PB製品 実績表（ケース数）</title>
+<style>
+  :root{
+    --accent:#0b6e4f; --accent2:#0f9d63; --head:#fff6c2; --headline:#e7d96a;
+    --bg:#f4f6f8; --card:#ffffff; --line:#e3e7eb; --text:#222; --muted:#9aa3ab;
+    --zebra:#fafbfc; --sub:#eef6f1; --tot:#dff0e6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI","Yu Gothic UI","Meiryo",sans-serif;background:var(--bg);color:var(--text);font-size:13px}
+  header{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;padding:12px 18px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:700}
+  header .meta{font-size:12px;opacity:.9}
+  .wrap{padding:14px 18px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+  .panel h2{font-size:12px;margin:0 0 8px;color:var(--accent);letter-spacing:.04em;font-weight:700}
+  .filters{display:grid;grid-template-columns:1.1fr 1.4fr 1fr;gap:14px}
+  @media(max-width:1000px){.filters{grid-template-columns:1fr}}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow:auto}
+  .chip{border:1px solid var(--line);background:#fff;border-radius:14px;padding:3px 10px;cursor:pointer;user-select:none;white-space:nowrap;font-size:12px;transition:.12s}
+  .chip:hover{border-color:var(--accent2)}
+  .chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .chip.sm{padding:2px 8px;font-size:11px}
+  .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  input[type=text]{border:1px solid var(--line);border-radius:6px;padding:5px 9px;font-size:12px;width:100%}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px}
+  .btn:hover{background:#f0f4f2}
+  .btn.p{background:var(--accent);color:#fff;border-color:var(--accent)}
+  label.cb{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
+  .scrolllist{max-height:150px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px}
+  .scrolllist label{display:block;padding:2px 4px;border-radius:4px;cursor:pointer;font-size:12px}
+  .scrolllist label:hover{background:#f0f4f2}
+  .yearblock{margin:0 12px 16px}
+  .yeartitle{font-size:13px;font-weight:700;color:var(--accent);margin:10px 0 4px;padding-left:2px;border-left:4px solid var(--accent2);padding:2px 0 2px 8px}
+  .tablewrap{overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+  table{border-collapse:separate;border-spacing:0;width:100%;font-size:12px}
+  th,td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  thead th{position:sticky;top:0;background:var(--head);border-bottom:2px solid var(--headline);z-index:3;text-align:right;font-weight:700}
+  thead th.lbl{text-align:left;z-index:5;left:0}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  td.zero{color:var(--muted)}
+  .colhin{position:sticky;left:0;background:#fff;z-index:2;text-align:left;min-width:260px}
+  thead th.colhin{z-index:6}
+  tr.tanto td{background:var(--tot);font-weight:700;border-top:2px solid var(--accent2)}
+  tr.ksub td{background:var(--sub);font-weight:600}
+  tr.item:nth-child(even) td{background:var(--zebra)}
+  tr.item td.colhin{background:#fff}
+  tr.item:hover td{background:#eef6ff}
+  td.tot{font-weight:700;background:#f7faf8}
+  .clk{cursor:pointer;text-decoration:underline dotted transparent}
+  .clk:hover{text-decoration-color:var(--accent2);color:var(--accent)}
+  .badge{display:inline-block;font-size:10px;background:#ffe1e1;color:#b00;border-radius:4px;padding:0 5px;margin-left:6px}
+  .cmark{color:#d08700;margin-left:5px;font-weight:700}
+  .empty{padding:46px;text-align:center;color:var(--muted);font-size:13px}
+  .legend{font-size:11px;color:var(--muted)}
+  .count{font-size:11px;color:var(--muted);margin-left:auto}
+  .indent{display:inline-block;color:var(--muted);margin-right:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>PB製品 実績表（ケース数）</h1>
+  <span class="meta" id="meta"></span>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <div class="filters">
+      <div>
+        <h2>担当者（一人 または 全員）</h2>
+        <div class="chips" id="tantoChips"></div>
+      </div>
+      <div>
+        <h2>得意先（集約コード優先）</h2>
+        <div class="row"><input type="text" id="kSearch" placeholder="得意先名・コードで絞り込み…"><button class="btn" data-all="k">全選択</button><button class="btn" data-none="k">全解除</button></div>
+        <div class="scrolllist" id="kList"></div>
+      </div>
+      <div>
+        <h2>製品</h2>
+        <div class="row"><input type="text" id="pSearch" placeholder="品名・品番で絞り込み…"><button class="btn" id="pClear">クリア</button></div>
+        <div class="row"><label class="cb"><input type="checkbox" id="incEnded"> 終売品を含む</label></div>
+        <div class="row"><label class="cb"><input type="checkbox" id="showConsol" checked> 東京支店合計（製品ごと）を表示</label></div>
+        <p class="legend">表の<b>得意先名</b>や<b>製品名</b>をクリックすると、ここの検索条件に反映されます。<br>東京支店合計＝絞り込み担当者の品番のうち<b>他担当者にも実績がある製品</b>を、品番ごとに支店全体で合計します（製造数量の漏れ確認用）。明細の<span class="cmark">★</span>が対象製品です。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>対象月（複数選択可・年度ごとに上下表示）</h2>
+    <div class="row">
+      <button class="btn" data-preset="all">全期間</button>
+      <button class="btn" data-preset="y1">前年度</button>
+      <button class="btn" data-preset="y2">今年度</button>
+      <button class="btn" data-preset="none">全解除</button>
+      <span class="legend">※GW・お盆・年末年始など連休前の製造数量確認に。</span>
+    </div>
+    <div class="chips" id="monthChips"></div>
+  </div>
+
+  <div class="panel" style="padding:0;overflow:hidden">
+    <div class="row" style="margin:8px 12px 0">
+      <button class="btn p" id="exportXlsx">Excel(.xlsx)ダウンロード</button>
+      <span class="count" id="count"></span>
+    </div>
+    <div id="tblHost"></div>
+    <div class="legend" style="margin:6px 12px 10px">数値はケース数（cs）。空欄・0は実績なし。<span class="badge">終売</span>＝標準ロット一覧で削除候補（〇）の品。</div>
+  </div>
+</div>
+
+<style>
+  #gate{display:none;position:fixed;inset:0;background:linear-gradient(135deg,#0b6e4f,#0f9d63);z-index:99;align-items:center;justify-content:center}
+  #gate.show{display:flex}
+  #gate .box{background:#fff;color:#222;padding:26px 30px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.3);width:300px;text-align:center;font-family:"Segoe UI","Yu Gothic UI",sans-serif}
+</style>
+<div id="gate"><div class="box">
+  <div style="font-weight:700;font-size:16px;color:#0b6e4f;margin-bottom:4px">PB製品 実績表</div>
+  <div style="font-size:12px;color:#777;margin-bottom:14px">閲覧パスコードを入力してください</div>
+  <input id="gatePass" type="password" inputmode="numeric" autocomplete="off" placeholder="パスコード" style="width:100%;padding:9px 10px;font-size:15px;border:1px solid #ccc;border-radius:8px;text-align:center;letter-spacing:.2em">
+  <button id="gateBtn" style="margin-top:12px;width:100%;padding:9px;border:0;border-radius:8px;background:#0b6e4f;color:#fff;font-size:14px;font-weight:700;cursor:pointer">表示する</button>
+  <div id="gateErr" style="color:#c00;font-size:12px;margin-top:8px;min-height:16px"></div>
+</div></div>
+
+<script src="data.js" onerror="window.__noplain=1"></script>
+<script src="data.enc.js" onerror="window.__noenc=1"></script>
+<script>
+function startApp(){
+const D = window.PB_DATA;
+const fmt = n => n ? Math.round(n).toLocaleString() : 0;
+const ymLabel = ym => ym.slice(0,4)+'/'+ym.slice(4);
+const fiscalYear = ym => { const y=+ym.slice(0,4), mo=+ym.slice(4); return mo>=4 ? y : y-1; };
+
+// ---- 状態（初期は何も選択していない）----
+const sel = { tanto:new Set(), k:new Set(), months:new Set(), pSearch:"", kSearch:"", incEnded:false, showConsol:true };
+
+document.getElementById('meta').textContent =
+  `更新: ${D.generated} ／ 月レンジ ${D.months[0]}〜${D.months[D.months.length-1]} ／ 全${D.records.length}明細`;
+
+// ---- 担当者チップ ----
+const tantoChips = document.getElementById('tantoChips');
+function setTanto(arr, el){
+  sel.tanto=new Set(arr); sel.k=new Set(); sel.kSearch=""; document.getElementById('kSearch').value="";
+  tantoChips.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));
+  if(el) el.classList.add('on');
+  buildKList(); render();
+}
+const allChip=document.createElement('span'); allChip.className='chip'; allChip.textContent='全員';
+allChip.onclick=()=>setTanto(D.tantos, allChip); tantoChips.appendChild(allChip);
+D.tantos.forEach(t=>{
+  const c=document.createElement('span'); c.className='chip'; c.textContent=t.replace(/　/g,' ');
+  c.onclick=()=>setTanto([t], c); tantoChips.appendChild(c);
+});
+
+// ---- 月チップ ----
+const monthChips = document.getElementById('monthChips');
+D.months.forEach(m=>{
+  const c=document.createElement('span'); c.className='chip sm'; c.textContent=ymLabel(m);
+  c.onclick=()=>{ if(sel.months.has(m)){sel.months.delete(m);c.classList.remove('on');} else {sel.months.add(m);c.classList.add('on');} render(); };
+  c.dataset.m=m; monthChips.appendChild(c);
+});
+function setMonths(arr){
+  sel.months=new Set(arr);
+  monthChips.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',sel.months.has(c.dataset.m)));
+  render();
+}
+document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{
+  const M=D.months, p=b.dataset.preset;
+  if(p==='all') setMonths(M);
+  else if(p==='last6') setMonths(M.slice(-6));
+  else if(p==='last12') setMonths(M.slice(-12));
+  else if(p==='y1') setMonths(M.slice(0,12));
+  else if(p==='y2') setMonths(M.slice(12));
+  else if(p==='none') setMonths([]);
+});
+
+// ---- 得意先リスト（担当者で連動）----
+const kList=document.getElementById('kList');
+function buildKList(){
+  const map=new Map();
+  D.records.forEach(r=>{ if(sel.tanto.has(r.tanto) && !map.has(r.kcode)) map.set(r.kcode, r.kname); });
+  const q=sel.kSearch.toLowerCase();
+  const items=[...map.entries()].filter(([code,name])=> !q || (name+code).toLowerCase().includes(q))
+    .sort((a,b)=>a[1].localeCompare(b[1],'ja'));
+  kList.innerHTML='';
+  if(!sel.tanto.size){ kList.innerHTML='<div class="legend">担当者を選択すると得意先が表示されます</div>'; return; }
+  items.forEach(([code,name])=>{
+    const lab=document.createElement('label');
+    const cb=document.createElement('input'); cb.type='checkbox';
+    cb.checked = sel.k.size===0 || sel.k.has(code);
+    cb.onchange=()=>{ if(cb.checked) sel.k.add(code); else sel.k.delete(code); render(); };
+    lab.appendChild(cb); lab.appendChild(document.createTextNode(' '+name+' ('+code+')'));
+    kList.appendChild(lab);
+  });
+  if(!items.length) kList.innerHTML='<div class="legend">該当なし</div>';
+}
+
+// ---- ボタン群 ----
+document.querySelector('[data-all="k"]').onclick=()=>{ sel.k=new Set(); kList.querySelectorAll('input').forEach(cb=>cb.checked=true); render(); };
+document.querySelector('[data-none="k"]').onclick=()=>{ sel.k=new Set(['__none__']); kList.querySelectorAll('input').forEach(cb=>cb.checked=false); render(); };
+document.getElementById('kSearch').oninput=e=>{sel.kSearch=e.target.value;buildKList();};
+document.getElementById('pSearch').oninput=e=>{sel.pSearch=e.target.value.toLowerCase();render();};
+document.getElementById('pClear').onclick=()=>{sel.pSearch="";document.getElementById('pSearch').value="";render();};
+document.getElementById('incEnded').onchange=e=>{sel.incEnded=e.target.checked;render();};
+document.getElementById('showConsol').onchange=e=>{sel.showConsol=e.target.checked;render();};
+
+// ---- フィルタ ----
+function filtered(){
+  const q=sel.pSearch;
+  return D.records.filter(r=>{
+    if(!sel.tanto.has(r.tanto)) return false;
+    if(!sel.incEnded && r.ended) return false;
+    if(sel.k.size && !sel.k.has(r.kcode)) return false;
+    if(q && !(r.hinmei+r.hinban).toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+function rowSum(r,months){ let s=0; months.forEach(m=>{const v=r.months[m]; if(v) s+=v;}); return s; }
+
+// ---- グルーピング（担当者 > 得意先 > 製品）----
+function buildTree(recs){
+  const tree=new Map();
+  recs.forEach(r=>{
+    if(!tree.has(r.tanto)) tree.set(r.tanto,{name:r.tanto,ks:new Map()});
+    const T=tree.get(r.tanto);
+    if(!T.ks.has(r.kcode)) T.ks.set(r.kcode,{name:r.kname,code:r.kcode,items:[]});
+    T.ks.get(r.kcode).items.push(r);
+  });
+  return tree;
+}
+
+// 1年度ぶんのテーブルHTML
+function renderBlock(months, tree, qhin){
+  const cell=(v,cls='')=>`<td class="num ${v?'':'zero'} ${cls}">${fmt(v)}</td>`;
+  let head='<thead><tr><th class="lbl colhin">担当者 / 得意先 / 製品</th>';
+  months.forEach(m=>head+='<th>'+ymLabel(m)+'</th>'); head+='<th class="tot">合計</th></tr></thead>';
+  let body='<tbody>';
+  const grand={m:{},sum:0};
+  [...tree.values()].sort((a,b)=>D.tantos.indexOf(a.name)-D.tantos.indexOf(b.name)).forEach(T=>{
+    const tm={}; let tsum=0;
+    const ksArr=[...T.ks.values()].map(K=>{
+      const km={}; let ksum=0;
+      K.items.forEach(r=>months.forEach(mo=>{const v=r.months[mo]; if(v){km[mo]=(km[mo]||0)+v;ksum+=v;tm[mo]=(tm[mo]||0)+v;tsum+=v;}}));
+      return {K,km,ksum};
+    });
+    if(tsum===0) return;   // 期間内実績0の担当者は非表示
+    months.forEach(mo=>{grand.m[mo]=(grand.m[mo]||0)+(tm[mo]||0);}); grand.sum+=tsum;
+    body+='<tr class="tanto"><td class="colhin">'+T.name.replace(/　/g,' ')+'</td>';
+    months.forEach(mo=>body+=cell(tm[mo])); body+=cell(tsum,'tot')+'</tr>';
+    ksArr.filter(x=>x.ksum>0).sort((a,b)=>b.ksum-a.ksum).forEach(({K,km,ksum})=>{
+      body+='<tr class="ksub"><td class="colhin"><span class="indent">└</span><span class="clk" data-kfilter="'+K.code+'" data-kname="'+K.name.replace(/"/g,'&quot;')+'">'+K.name+' ('+K.code+')</span></td>';
+      months.forEach(mo=>body+=cell(km[mo])); body+=cell(ksum,'tot')+'</tr>';
+      K.items.map(r=>({r,rs:rowSum(r,months)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs).forEach(({r,rs})=>{
+        body+='<tr class="item"><td class="colhin"><span class="indent">　・</span><span class="clk" data-pfilter="'+r.hinmei.replace(/"/g,'&quot;')+'">'+r.hinban+' '+r.hinmei+'</span>'+(qhin&&qhin.has(r.hinban)?'<span class="cmark" title="東京支店合計の対象（他担当者にも実績あり）">★</span>':'')+(r.ended?'<span class="badge">終売</span>':'')+'</td>';
+        months.forEach(mo=>body+=cell(r.months[mo])); body+=cell(rs,'tot')+'</tr>';
+      });
+    });
+  });
+  body+='<tr class="tanto"><td class="colhin">総合計</td>';
+  months.forEach(mo=>body+=cell(grand.m[mo])); body+=cell(grand.sum,'tot')+'</tr></tbody>';
+  return {html:'<div class="tablewrap"><table>'+head+body+'</table></div>', grand};
+}
+
+// ---- 東京支店合計（品番ごとに支店全体＝全担当者・全得意先を合計）----
+// 対象品番＝絞り込み中(recs)の品番のうち、選択担当者以外の担当者も該当期間に実績を持つもの。
+// 担当者のみ／担当者＋得意先／担当者＋品番 いずれの絞り込みでも「他担当者にも実績あり」を条件とする。
+function qualifySet(months, recs){
+  const inScope=new Set(); recs.forEach(r=>inScope.add(r.hinban));
+  const other=new Set();
+  D.records.forEach(r=>{
+    if(sel.tanto.has(r.tanto)) return;        // 選択担当者は除外（＝他担当者のみ）
+    if(!inScope.has(r.hinban)) return;
+    for(const mo of months){ if(r.months[mo]){ other.add(r.hinban); break; } }
+  });
+  return other;
+}
+function consolidateByHinban(hinSet, months){
+  const map=new Map();
+  D.records.forEach(r=>{
+    if(!hinSet.has(r.hinban)) return;
+    let e=map.get(r.hinban);
+    if(!e){ e={hinban:r.hinban,hinmei:r.hinmei,ended:r.ended,m:{}}; map.set(r.hinban,e); }
+    months.forEach(mo=>{const v=r.months[mo]; if(v) e.m[mo]=(e.m[mo]||0)+v;});
+  });
+  return [...map.values()];
+}
+function renderConsolBlock(months, items){
+  const cell=(v,cls='')=>`<td class="num ${v?'':'zero'} ${cls}">${fmt(v)}</td>`;
+  let head='<thead><tr><th class="lbl colhin">製品（全社合算）</th>';
+  months.forEach(m=>head+='<th>'+ymLabel(m)+'</th>'); head+='<th class="tot">合計</th></tr></thead>';
+  let body='<tbody>'; const g={m:{},sum:0};
+  items.map(it=>({it,rs:months.reduce((s,mo)=>s+(it.m[mo]||0),0)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs).forEach(({it,rs})=>{
+    months.forEach(mo=>{const v=it.m[mo]; if(v) g.m[mo]=(g.m[mo]||0)+v;}); g.sum+=rs;
+    body+='<tr class="item"><td class="colhin">'+it.hinban+' '+it.hinmei+(it.ended?'<span class="badge">終売</span>':'')+'</td>';
+    months.forEach(mo=>body+=cell(it.m[mo])); body+=cell(rs,'tot')+'</tr>';
+  });
+  body+='<tr class="tanto"><td class="colhin">合算 合計</td>';
+  months.forEach(mo=>body+=cell(g.m[mo])); body+=cell(g.sum,'tot')+'</tr></tbody>';
+  return {html:'<div class="tablewrap"><table>'+head+body+'</table></div>', grand:g};
+}
+
+// ---- 描画 ----
+const host=document.getElementById('tblHost');
+function render(){
+  const months=D.months.filter(m=>sel.months.has(m));
+  const recs=filtered();
+  if(!sel.tanto.size || !months.length){
+    host.innerHTML='<div class="empty">担当者と対象月を選択すると実績が表示されます。<br>（製品名・得意先名をクリックすると検索条件に反映されます）</div>';
+    document.getElementById('count').textContent=''; return;
+  }
+  if(!recs.length){
+    host.innerHTML='<div class="empty">条件に一致する実績がありません。フィルタを見直してください。</div>';
+    document.getElementById('count').textContent=''; return;
+  }
+  const tree=buildTree(recs);
+  // 年度ごとに分割（上=古い年度、下=新しい年度）
+  const fyMap=new Map();
+  months.forEach(m=>{const f=fiscalYear(m); if(!fyMap.has(f)) fyMap.set(f,[]); fyMap.get(f).push(m);});
+  const fyKeys=[...fyMap.keys()].sort();
+  const qhin=qualifySet(months,recs);
+  let htmlAll=''; let total=0;
+
+  // 東京支店合計セクション（製品ごと・他担当者にも実績がある品番のみ）
+  if(sel.showConsol){
+    if(qhin.size){
+      const items=consolidateByHinban(qhin, months);
+      let consol='';
+      fyKeys.forEach(f=>{
+        const bm=fyMap.get(f);
+        const {html,grand}=renderConsolBlock(bm,items);
+        if(grand.sum===0) return;   // 期間内実績0の年度は非表示
+        consol+='<div class="yearblock"><div class="yeartitle">【東京支店合計】'+f+'年度（'+f+'/04〜'+(f+1)+'/03）　合計 '+fmt(grand.sum)+' cs</div>'+html+'</div>';
+      });
+      htmlAll+='<div style="margin:6px 12px 0;font-size:12px;color:var(--accent);font-weight:700">■ 東京支店合計（絞り込み担当者の品番のうち、他担当者にも実績がある製品を品番ごとに支店全体で合計）</div>'+consol+
+        '<div style="margin:4px 12px 10px;border-top:2px dashed var(--line)"></div>'+
+        '<div style="margin:6px 12px 0;font-size:12px;color:var(--accent);font-weight:700">■ 絞り込み明細（担当者＞得意先＞製品）　<span class="cmark">★</span>=東京支店合計の対象</div>';
+    } else {
+      htmlAll+='<div style="margin:8px 12px;color:var(--muted);font-size:12px">東京支店合計の対象製品はありません（絞り込み担当者以外で同一品番の実績なし、または担当者を全員選択中）。</div>';
+    }
+  }
+
+  let shown=0;
+  fyKeys.forEach(f=>{
+    const bm=fyMap.get(f);
+    const {html,grand}=renderBlock(bm,tree,qhin);
+    if(grand.sum===0) return;   // 期間内実績0の年度は非表示
+    htmlAll+='<div class="yearblock"><div class="yeartitle">'+f+'年度（'+f+'/04〜'+(f+1)+'/03）　対象'+bm.length+'か月　合計 '+fmt(grand.sum)+' cs</div>'+html+'</div>';
+    total+=grand.sum; shown++;
+  });
+  if(!shown && !total) htmlAll+='<div class="empty">選択した期間に実績のある製品はありません。対象月を変更してください。</div>';
+  host.innerHTML=htmlAll;
+  document.getElementById('count').textContent=`表示 ${recs.length} 明細 ／ 対象月 ${months.length} ／ 合計 ${fmt(total)} cs`;
+}
+
+// Excel出力：先頭=チェックリスト一覧、以降=得意先ごとのシート
+// 各セル = [値, スタイル番号]。0=既定 1=数値 2/3=黄ヘッダ 4/5=担当者 6/7=得意先 8/9=製品 10=表題 11=年度 12/13=合計
+function exportData(){
+  const months=D.months.filter(m=>sel.months.has(m));
+  const recs=filtered();
+  if(!sel.tanto.size || !months.length || !recs.length) return null;
+  const fy=new Map();
+  months.forEach(m=>{const f=fiscalYear(m); if(!fy.has(f)) fy.set(f,[]); fy.get(f).push(m);});
+  const fyList=[...fy.keys()].sort().map(f=>({f,bm:fy.get(f)}));
+  const custMap=new Map();
+  recs.forEach(r=>{ if(!custMap.has(r.kcode)) custMap.set(r.kcode,{tanto:r.tanto,kname:r.kname,kcode:r.kcode,items:[]}); custMap.get(r.kcode).items.push(r); });
+  const custs=[...custMap.values()].sort((a,b)=>(D.tantos.indexOf(a.tanto)-D.tantos.indexOf(b.tanto)) || a.kname.localeCompare(b.kname,'ja'));
+  const qualify=qualifySet(months,recs);
+  return {months,fyList,custs,qualify};
+}
+function sheetName(name,used){
+  let n=String(name).replace(/[\\\/\?\*\[\]:]/g,' ').trim().slice(0,28) || 'sheet';
+  let base=n,i=2; while(used.has(n)){ n=base.slice(0,25)+'_'+i; i++; } used.add(n); return n;
+}
+function checklistSheet(ed){
+  const rows=[];
+  rows.push([['PB製品 製造チェックリスト（該当製品一覧）',10]]);
+  rows.push([['対象期間: '+ymLabel(ed.months[0])+'〜'+ymLabel(ed.months[ed.months.length-1])+'　／　更新: '+D.generated,0]]);
+  rows.push([]);
+  rows.push([['☑',2],['担当者',2],['得意先',2],['得意先コード',2],['品番',2],['品名',2],['期間合計(cs)',3]]);
+  ed.custs.forEach(c=>{
+    c.items.map(r=>({r,tot:rowSum(r,ed.months)})).sort((a,b)=>b.tot-a.tot).forEach(({r,tot})=>{
+      const mk=ed.qualify.has(r.hinban)?'★ ':'';
+      rows.push([['□',0],[c.tanto.replace(/　/g,' '),8],[c.kname,8],[c.kcode,8],[r.hinban,8],[mk+r.hinmei+(r.ended?' [終売]':''),8],[tot,9]]);
+    });
+  });
+  return {name:'チェックリスト', rows, cols:[4,14,30,16,12,42,12]};
+}
+function customerSheet(c,ed,used){
+  const rows=[];
+  rows.push([[c.kname+' ('+c.kcode+')',10]]);
+  rows.push([['担当者: '+c.tanto.replace(/　/g,' ')+'　／　★=東京支店合計の対象（他担当者にも実績あり）',0]]);
+  let ncols=3;
+  ed.fyList.forEach(({f,bm})=>{
+    const its=c.items.map(r=>({r,rs:rowSum(r,bm)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs);
+    if(!its.length) return;   // 期間内実績0の年度は非表示
+    ncols=Math.max(ncols,bm.length+3);
+    rows.push([]);
+    rows.push([[f+'年度（'+f+'/04〜'+(f+1)+'/03）',11]]);
+    const hdr=[['品番',2],['製品',2]]; bm.forEach(mo=>hdr.push([ymLabel(mo),3])); hdr.push(['合計',3]); rows.push(hdr);
+    const tot={}; let tsum=0;
+    its.forEach(({r,rs})=>{
+      const mk=ed.qualify.has(r.hinban)?'★ ':'';
+      const ir=[[r.hinban,8],[mk+r.hinmei+(r.ended?' [終売]':''),8]];
+      bm.forEach(mo=>{const v=r.months[mo]||0; ir.push([v,9]); if(v){tot[mo]=(tot[mo]||0)+v; tsum+=v;}});
+      ir.push([rs,9]); rows.push(ir);
+    });
+    const gr=[['得意先 合計',12],['',12]]; bm.forEach(mo=>gr.push([tot[mo]||0,13])); gr.push([tsum,13]); rows.push(gr);
+  });
+  const cols=[12,46]; for(let i=2;i<ncols;i++) cols.push(10.5);
+  return {name:sheetName(c.kname,used), rows, cols};
+}
+function consolSheet(ed){
+  const items=consolidateByHinban(ed.qualify, ed.months);
+  const rows=[];
+  rows.push([['東京支店合計（製品ごと・他担当者にも実績がある製品を支店全体で合計）',10]]);
+  rows.push([['対象期間: '+ymLabel(ed.months[0])+'〜'+ymLabel(ed.months[ed.months.length-1])+'　／　更新: '+D.generated,0]]);
+  if(!items.length) rows.push([['対象製品はありません（絞り込み担当者以外で同一品番の実績なし、または担当者を全員選択中）。',0]]);
+  let ncols=3;
+  ed.fyList.forEach(({f,bm})=>{
+    ncols=Math.max(ncols,bm.length+3);
+    rows.push([]);
+    rows.push([[f+'年度（'+f+'/04〜'+(f+1)+'/03）',11]]);
+    const hdr=[['品番',2],['製品',2]]; bm.forEach(mo=>hdr.push([ymLabel(mo),3])); hdr.push(['合計',3]); rows.push(hdr);
+    const tot={}; let tsum=0;
+    items.map(it=>({it,rs:bm.reduce((s,mo)=>s+(it.m[mo]||0),0)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs).forEach(({it,rs})=>{
+      const ir=[[it.hinban,8],[it.hinmei+(it.ended?' [終売]':''),8]];
+      bm.forEach(mo=>{const v=it.m[mo]||0; ir.push([v,9]); if(v){tot[mo]=(tot[mo]||0)+v; tsum+=v;}});
+      ir.push([rs,9]); rows.push(ir);
+    });
+    const gr=[['合計',12],['',12]]; bm.forEach(mo=>gr.push([tot[mo]||0,13])); gr.push([tsum,13]); rows.push(gr);
+  });
+  const cols=[12,46]; for(let i=2;i<ncols;i++) cols.push(10.5);
+  return {name:'東京支店合計', rows, cols};
+}
+
+// ---- 依存ライブラリ無しの最小XLSXライター（store方式ZIP）----
+const xmlEsc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function colLetter(n){let s='';n++;while(n){n--;s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26);}return s;}
+const _crcTable=(()=>{const t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);t[n]=c>>>0;}return t;})();
+function crc32(b){let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=_crcTable[(c^b[i])&0xFF]^(c>>>8);return (c^0xFFFFFFFF)>>>0;}
+function makeZip(files){
+  const enc=new TextEncoder();
+  const u16=n=>[n&255,(n>>8)&255], u32=n=>[n&255,(n>>8)&255,(n>>16)&255,(n>>24)&255];
+  const parts=[]; const cen=[]; let off=0;
+  files.forEach(f=>{
+    const data=enc.encode(f.data), name=enc.encode(f.name), crc=crc32(data);
+    const local=[].concat(u32(0x04034b50),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(name.length),u16(0));
+    parts.push(Uint8Array.from(local),name,data);
+    const c=[].concat(u32(0x02014b50),u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(name.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(off));
+    cen.push(Uint8Array.from(c),name);
+    off+=30+name.length+data.length;
+  });
+  let cdLen=0; cen.forEach(p=>cdLen+=p.length);
+  const eocd=[].concat(u32(0x06054b50),u16(0),u16(0),u16(files.length),u16(files.length),u32(cdLen),u32(off),u16(0));
+  return new Blob([...parts,...cen,Uint8Array.from(eocd)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+const STYLES_XML='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+'<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0"/></numFmts>'+
+'<fonts count="4">'+
+'<font><sz val="11"/><name val="Yu Gothic"/></font>'+
+'<font><b/><sz val="11"/><name val="Yu Gothic"/></font>'+
+'<font><b/><sz val="14"/><color rgb="FF0B6E4F"/><name val="Yu Gothic"/></font>'+
+'<font><b/><sz val="12"/><color rgb="FF0B6E4F"/><name val="Yu Gothic"/></font></fonts>'+
+'<fills count="6">'+
+'<fill><patternFill patternType="none"/></fill>'+
+'<fill><patternFill patternType="gray125"/></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FFFFF6C2"/></patternFill></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FFDFF0E6"/></patternFill></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FFEEF6F1"/></patternFill></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FFCFE9D8"/></patternFill></fill></fills>'+
+'<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+
+'<border><left/><right/><top/><bottom style="thin"><color rgb="FFE7D96A"/></bottom><diagonal/></border></borders>'+
+'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
+'<cellXfs count="14">'+
+'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+
+'<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
+'<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left"/></xf>'+
+'<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center"/></xf>'+
+'<xf numFmtId="0" fontId="1" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="left"/></xf>'+
+'<xf numFmtId="164" fontId="1" fillId="3" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
+'<xf numFmtId="0" fontId="1" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="left"/></xf>'+
+'<xf numFmtId="164" fontId="1" fillId="4" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="left"/></xf>'+
+'<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
+'<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>'+
+'<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>'+
+'<xf numFmtId="0" fontId="1" fillId="5" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="left"/></xf>'+
+'<xf numFmtId="164" fontId="1" fillId="5" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+
+function sheetXml(sheet){
+  const w=sheet.cols||[];
+  const cols=w.length? '<cols>'+w.map((x,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+x+'" customWidth="1"/>').join('')+'</cols>' : '';
+  let sd='';
+  sheet.rows.forEach((cells,ri)=>{
+    const r=ri+1;
+    if(!cells.length){ sd+='<row r="'+r+'"/>'; return; }
+    let cc='';
+    cells.forEach((cell,ci)=>{
+      const v=cell[0], s=cell[1], ref=colLetter(ci)+r;
+      if(typeof v==='number') cc+='<c r="'+ref+'" s="'+s+'"><v>'+Math.round(v)+'</v></c>';
+      else cc+='<c r="'+ref+'" s="'+s+'" t="inlineStr"><is><t xml:space="preserve">'+xmlEsc(v)+'</t></is></c>';
+    });
+    sd+='<row r="'+r+'">'+cc+'</row>';
+  });
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    cols+'<sheetData>'+sd+'</sheetData></worksheet>';
+}
+
+function buildXlsxFiles(sheets){
+  const ctOv=sheets.map((s,i)=>'<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('');
+  const sheetTags=sheets.map((s,i)=>'<sheet name="'+xmlEsc(s.name)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>').join('');
+  const relSheets=sheets.map((s,i)=>'<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>').join('');
+  const stylesRid='rId'+(sheets.length+1);
+  const files=[
+    {name:'[Content_Types].xml', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+ctOv+'<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'},
+    {name:'_rels/.rels', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'},
+    {name:'xl/workbook.xml', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'+sheetTags+'</sheets></workbook>'},
+    {name:'xl/_rels/workbook.xml.rels', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+relSheets+'<Relationship Id="'+stylesRid+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'},
+    {name:'xl/styles.xml', data:STYLES_XML},
+  ];
+  sheets.forEach((s,i)=>files.push({name:'xl/worksheets/sheet'+(i+1)+'.xml', data:sheetXml(s)}));
+  return files;
+}
+
+function downloadXlsx(){
+  const ed=exportData();
+  if(!ed){ alert('表示中のデータがありません。担当者と対象月を選択してください。'); return; }
+  const used=new Set();
+  // 得意先別シートは期間内実績>0の得意先のみ（チェックリストは全件記載）
+  const custsWithData=ed.custs.filter(c=>c.items.some(r=>ed.months.some(m=>r.months[m])));
+  if(custsWithData.length>80 && !confirm(custsWithData.length+'件の得意先を個別シートに出力します（時間がかかる場合があります）。よろしいですか？')) return;
+  const sheets=[checklistSheet(ed), consolSheet(ed), ...custsWithData.map(c=>customerSheet(c,ed,used))];
+  const a=document.createElement('a'); a.href=URL.createObjectURL(makeZip(buildXlsxFiles(sheets)));
+  a.download='PB実績_'+new Date().toISOString().slice(0,10)+'.xlsx'; a.click();
+}
+
+// 表クリック → 検索条件へ反映
+host.addEventListener('click', e=>{
+  const kEl=e.target.closest('[data-kfilter]');
+  if(kEl){ sel.k=new Set([kEl.dataset.kfilter]); sel.kSearch=kEl.dataset.kname; document.getElementById('kSearch').value=kEl.dataset.kname; buildKList(); render(); return; }
+  const pEl=e.target.closest('[data-pfilter]');
+  if(pEl){ sel.pSearch=pEl.dataset.pfilter.toLowerCase(); document.getElementById('pSearch').value=pEl.dataset.pfilter; render(); }
+});
+
+document.getElementById('exportXlsx').onclick=downloadXlsx;
+
+buildKList();
+render();
+}
+
+/* ---- 起動：平文(data.js) があれば即表示、無ければパスコードで data.enc.js を復号 ---- */
+function b64ToBuf(b64){const bin=atob(b64);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return u;}
+async function unlock(pass){
+  const e=window.PB_ENC, enc=new TextEncoder();
+  const base=await crypto.subtle.importKey('raw',enc.encode(pass),'PBKDF2',false,['deriveKey']);
+  const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt:b64ToBuf(e.salt),iterations:e.iter,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['decrypt']);
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64ToBuf(e.iv)},key,b64ToBuf(e.ct));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+function showGate(){
+  const g=document.getElementById('gate'); g.classList.add('show');
+  const inp=document.getElementById('gatePass'), btn=document.getElementById('gateBtn'), err=document.getElementById('gateErr');
+  const go=async()=>{ if(!inp.value) return; err.textContent='確認中…'; btn.disabled=true;
+    try{ window.PB_DATA=await unlock(inp.value); g.classList.remove('show'); startApp(); }
+    catch(_){ err.textContent='パスコードが違います。'; btn.disabled=false; inp.select(); } };
+  btn.onclick=go; inp.onkeydown=ev=>{ if(ev.key==='Enter') go(); };
+  inp.focus();
+}
+if(window.PB_DATA) startApp();
+else if(window.PB_ENC){
+  if(window.crypto && crypto.subtle) showGate();
+  else document.body.innerHTML='<div style="padding:40px;font-family:sans-serif">この環境では復号できません（暗号化通信のページで開いてください）。</div>';
+}
+else document.body.innerHTML='<div style="padding:40px;font-family:sans-serif">データを読み込めませんでした（data.js / data.enc.js が見つかりません）。</div>';
+</script>
+</body>
+</html>
