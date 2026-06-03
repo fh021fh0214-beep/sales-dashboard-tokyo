@@ -67,9 +67,14 @@
   .indent{display:inline-block;color:var(--muted);margin-right:4px}
   html{-webkit-text-size-adjust:100%}
   .tablewrap{-webkit-overflow-scrolling:touch}
+  .ymshort{display:none}
 
   /* ===== スマホ（iPhone等）向け ===== */
   @media(max-width:700px){
+    /* 品番・製品コード・得意先コードは非表示、年月は短縮表示 */
+    .hinban,.pcode,.kcode{display:none}
+    .ymfull{display:none}
+    .ymshort{display:inline}
     body{font-size:14px}
     header{padding:10px 12px;gap:6px}
     header h1{font-size:16px}
@@ -92,8 +97,9 @@
     .yeartitle{font-size:13px}
     /* 表：余白を詰めて品名は折り返し、最初の列幅を縮小 */
     table{font-size:12px}
-    th,td{padding:6px 7px}
-    .colhin{min-width:130px;max-width:150px;white-space:normal;word-break:break-word}
+    th,td{padding:6px 5px}
+    /* 製品名・得意先名は1行表示（長い場合は…で省略） */
+    .colhin{min-width:150px;max-width:210px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     thead th{font-size:11px}
     .legend{font-size:12px}
     .count{font-size:12px}
@@ -170,6 +176,16 @@ function startApp(){
 const D = window.PB_DATA;
 const fmt = n => n ? Math.round(n).toLocaleString() : 0;
 const ymLabel = ym => ym.slice(0,4)+'/'+ym.slice(4);
+const ymShort = ym => ym.slice(2,4)+'/'+(+ym.slice(4));
+const ymHead = ym => '<span class="ymfull">'+ymLabel(ym)+'</span><span class="ymshort">'+ymShort(ym)+'</span>';
+// 製品ラベル: 品番／製品コード（ＢＥ-９２９等）／製品名 をspanに分割（スマホでは前2つを非表示）
+const _codeRe=/^([０-９Ａ-Ｚ][０-９Ａ-Ｚ]*[－ー\-][０-９][０-９Ａ-Ｚ]*)([\s　]*)([\s\S]*)$/;
+function prodLabel(hinban, hinmei){
+  const m=String(hinmei).match(_codeRe);
+  let code='', rest=hinmei;
+  if(m){ code=m[1]+m[2]; rest=m[3]; }
+  return '<span class="hinban">'+hinban+' </span>'+(code?'<span class="pcode">'+code+'</span>':'')+'<span class="pname">'+rest+'</span>';
+}
 const fiscalYear = ym => { const y=+ym.slice(0,4), mo=+ym.slice(4); return mo>=4 ? y : y-1; };
 
 // ---- 状態（初期は何も選択していない）----
@@ -274,7 +290,7 @@ function buildTree(recs){
 function renderBlock(months, tree, qhin){
   const cell=(v,cls='')=>`<td class="num ${v?'':'zero'} ${cls}">${fmt(v)}</td>`;
   let head='<thead><tr><th class="lbl colhin">担当者 / 得意先 / 製品</th>';
-  months.forEach(m=>head+='<th>'+ymLabel(m)+'</th>'); head+='<th class="tot">合計</th></tr></thead>';
+  months.forEach(m=>head+='<th>'+ymHead(m)+'</th>'); head+='<th class="tot">合計</th></tr></thead>';
   let body='<tbody>';
   const grand={m:{},sum:0};
   [...tree.values()].sort((a,b)=>D.tantos.indexOf(a.name)-D.tantos.indexOf(b.name)).forEach(T=>{
@@ -289,10 +305,10 @@ function renderBlock(months, tree, qhin){
     body+='<tr class="tanto"><td class="colhin">'+T.name.replace(/　/g,' ')+'</td>';
     months.forEach(mo=>body+=cell(tm[mo])); body+=cell(tsum,'tot')+'</tr>';
     ksArr.filter(x=>x.ksum>0).sort((a,b)=>b.ksum-a.ksum).forEach(({K,km,ksum})=>{
-      body+='<tr class="ksub"><td class="colhin"><span class="indent">└</span><span class="clk" data-kfilter="'+K.code+'" data-kname="'+K.name.replace(/"/g,'&quot;')+'">'+K.name+' ('+K.code+')</span></td>';
+      body+='<tr class="ksub"><td class="colhin"><span class="indent">└</span><span class="clk" data-kfilter="'+K.code+'" data-kname="'+K.name.replace(/"/g,'&quot;')+'">'+K.name+'<span class="kcode"> ('+K.code+')</span></span></td>';
       months.forEach(mo=>body+=cell(km[mo])); body+=cell(ksum,'tot')+'</tr>';
       K.items.map(r=>({r,rs:rowSum(r,months)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs).forEach(({r,rs})=>{
-        body+='<tr class="item"><td class="colhin"><span class="indent">　・</span><span class="clk" data-pfilter="'+r.hinmei.replace(/"/g,'&quot;')+'">'+r.hinban+' '+r.hinmei+'</span>'+(qhin&&qhin.has(r.hinban)?'<span class="cmark" title="東京支店合計の対象（他担当者にも実績あり）">★</span>':'')+(r.ended?'<span class="badge">終売</span>':'')+'</td>';
+        body+='<tr class="item"><td class="colhin"><span class="indent">　・</span><span class="clk" data-pfilter="'+r.hinmei.replace(/"/g,'&quot;')+'">'+prodLabel(r.hinban,r.hinmei)+'</span>'+(qhin&&qhin.has(r.hinban)?'<span class="cmark" title="東京支店合計の対象（他担当者にも実績あり）">★</span>':'')+(r.ended?'<span class="badge">終売</span>':'')+'</td>';
         months.forEach(mo=>body+=cell(r.months[mo])); body+=cell(rs,'tot')+'</tr>';
       });
     });
@@ -328,11 +344,11 @@ function consolidateByHinban(hinSet, months){
 function renderConsolBlock(months, items){
   const cell=(v,cls='')=>`<td class="num ${v?'':'zero'} ${cls}">${fmt(v)}</td>`;
   let head='<thead><tr><th class="lbl colhin">製品（全社合算）</th>';
-  months.forEach(m=>head+='<th>'+ymLabel(m)+'</th>'); head+='<th class="tot">合計</th></tr></thead>';
+  months.forEach(m=>head+='<th>'+ymHead(m)+'</th>'); head+='<th class="tot">合計</th></tr></thead>';
   let body='<tbody>'; const g={m:{},sum:0};
   items.map(it=>({it,rs:months.reduce((s,mo)=>s+(it.m[mo]||0),0)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs).forEach(({it,rs})=>{
     months.forEach(mo=>{const v=it.m[mo]; if(v) g.m[mo]=(g.m[mo]||0)+v;}); g.sum+=rs;
-    body+='<tr class="item"><td class="colhin">'+it.hinban+' '+it.hinmei+(it.ended?'<span class="badge">終売</span>':'')+'</td>';
+    body+='<tr class="item"><td class="colhin">'+prodLabel(it.hinban,it.hinmei)+(it.ended?'<span class="badge">終売</span>':'')+'</td>';
     months.forEach(mo=>body+=cell(it.m[mo])); body+=cell(rs,'tot')+'</tr>';
   });
   body+='<tr class="tanto"><td class="colhin">合算 合計</td>';
