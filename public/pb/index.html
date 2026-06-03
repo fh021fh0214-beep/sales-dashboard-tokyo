@@ -617,18 +617,28 @@ async function unlock(pass){
   const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64ToBuf(e.iv)},key,b64ToBuf(e.ct));
   return JSON.parse(new TextDecoder().decode(pt));
 }
+const PASS_KEY='pb_pass';
 function showGate(){
   const g=document.getElementById('gate'); g.classList.add('show');
   const inp=document.getElementById('gatePass'), btn=document.getElementById('gateBtn'), err=document.getElementById('gateErr');
   const go=async()=>{ if(!inp.value) return; err.textContent='確認中…'; btn.disabled=true;
-    try{ window.PB_DATA=await unlock(inp.value); g.classList.remove('show'); startApp(); }
+    try{ window.PB_DATA=await unlock(inp.value); try{localStorage.setItem(PASS_KEY,inp.value);}catch(_){} g.classList.remove('show'); startApp(); }
     catch(_){ err.textContent='パスコードが違います。'; btn.disabled=false; inp.select(); } };
   btn.onclick=go; inp.onkeydown=ev=>{ if(ev.key==='Enter') go(); };
   inp.focus();
 }
+async function bootEnc(){
+  // このデバイスで一度ログイン済みなら、保存済みパスコードで自動的に開く
+  let saved=null; try{ saved=localStorage.getItem(PASS_KEY); }catch(_){}
+  if(saved){
+    try{ window.PB_DATA=await unlock(saved); startApp(); return; }
+    catch(_){ try{ localStorage.removeItem(PASS_KEY); }catch(__){} }   // パスコード変更時などは破棄
+  }
+  showGate();
+}
 if(window.PB_DATA) startApp();
 else if(window.PB_ENC){
-  if(window.crypto && crypto.subtle) showGate();
+  if(window.crypto && crypto.subtle) bootEnc();
   else document.body.innerHTML='<div style="padding:40px;font-family:sans-serif">この環境では復号できません（暗号化通信のページで開いてください）。</div>';
 }
 else document.body.innerHTML='<div style="padding:40px;font-family:sans-serif">データを読み込めませんでした（data.js / data.enc.js が見つかりません）。</div>';
