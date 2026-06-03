@@ -65,6 +65,39 @@
   .legend{font-size:11px;color:var(--muted)}
   .count{font-size:11px;color:var(--muted);margin-left:auto}
   .indent{display:inline-block;color:var(--muted);margin-right:4px}
+  html{-webkit-text-size-adjust:100%}
+  .tablewrap{-webkit-overflow-scrolling:touch}
+
+  /* ===== スマホ（iPhone等）向け ===== */
+  @media(max-width:700px){
+    body{font-size:14px}
+    header{padding:10px 12px;gap:6px}
+    header h1{font-size:16px}
+    header .meta{font-size:11px;flex-basis:100%}
+    .wrap{padding:8px}
+    .panel{padding:10px 10px;border-radius:8px;margin-bottom:8px}
+    .panel h2{font-size:13px}
+    /* iOS入力時の自動ズーム防止のため16px */
+    input[type=text]{font-size:16px;padding:8px 10px}
+    select{font-size:15px;padding:7px}
+    /* タップしやすいチップ */
+    .chip{font-size:13px;padding:6px 12px}
+    .chip.sm{font-size:13px;padding:5px 10px}
+    .chips{gap:8px;max-height:150px}
+    .scrolllist{max-height:170px}
+    .scrolllist label{font-size:14px;padding:5px 4px}
+    label.cb{font-size:14px;padding:3px 0}
+    .btn{font-size:13px;padding:7px 12px}
+    .yearblock{margin:0 4px 14px}
+    .yeartitle{font-size:13px}
+    /* 表：余白を詰めて品名は折り返し、最初の列幅を縮小 */
+    table{font-size:12px}
+    th,td{padding:6px 7px}
+    .colhin{min-width:130px;max-width:150px;white-space:normal;word-break:break-word}
+    thead th{font-size:11px}
+    .legend{font-size:12px}
+    .count{font-size:12px}
+  }
 </style>
 </head>
 <body>
@@ -125,7 +158,7 @@
 <div id="gate"><div class="box">
   <div style="font-weight:700;font-size:16px;color:#0b6e4f;margin-bottom:4px">PB製品 実績表</div>
   <div style="font-size:12px;color:#777;margin-bottom:14px">閲覧パスコードを入力してください</div>
-  <input id="gatePass" type="password" inputmode="numeric" autocomplete="off" placeholder="パスコード" style="width:100%;padding:9px 10px;font-size:15px;border:1px solid #ccc;border-radius:8px;text-align:center;letter-spacing:.2em">
+  <input id="gatePass" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="パスコード（英数字）" style="width:100%;padding:11px 10px;font-size:16px;border:1px solid #ccc;border-radius:8px;text-align:center;letter-spacing:.15em">
   <button id="gateBtn" style="margin-top:12px;width:100%;padding:9px;border:0;border-radius:8px;background:#0b6e4f;color:#fff;font-size:14px;font-weight:700;cursor:pointer">表示する</button>
   <div id="gateErr" style="color:#c00;font-size:12px;margin-top:8px;min-height:16px"></div>
 </div></div>
