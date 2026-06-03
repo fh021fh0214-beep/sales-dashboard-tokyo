@@ -1,7 +1,12 @@
 import Dashboard from './SalesDashboard'
+import PasswordGate from './PasswordGate'
 
 function App() {
-  return <Dashboard />
+  return (
+    <PasswordGate>
+      <Dashboard />
+    </PasswordGate>
+  )
 }
 
 export default App
