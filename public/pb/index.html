@@ -410,7 +410,9 @@ function renderHolidayBlock(months, items, showTanto){
     const stock=STOCK[it.hinban]||0;
     return {it, demand, stock, need:Math.max(0, demand-stock)};
   }).filter(x=> x.demand>0 || x.stock>0 || months.some(mo=>x.it.m[mo]));
-  rows.sort((a,b)=> b.need-a.need || b.demand-a.demand);
+  // 並び順：赤(不足)→黄(前年あり直近3か月0)→既定、各グループ内は製造必要数(需要)が多い順
+  const rnk=x=>{const s=rowStatus(x.it.hinban,x.need); return s==='short'?0:s==='warn'?1:2;};
+  rows.sort((a,b)=> rnk(a)-rnk(b) || b.need-a.need || b.demand-a.demand);
   let body='<tbody>';
   rows.forEach(({it,demand,stock,need})=>{
     const st=rowStatus(it.hinban, need);
@@ -468,79 +470,56 @@ function render(){
     document.getElementById('count').textContent=''; return;
   }
   const tree=buildTree(recs);
-  // 年度ごとに分割（上=古い年度、下=新しい年度）
-  const fyMap=new Map();
-  months.forEach(m=>{const f=fiscalYear(m); if(!fyMap.has(f)) fyMap.set(f,[]); fyMap.get(f).push(m);});
-  const fyKeys=[...fyMap.keys()].sort();
   const qhin=qualifySet(months,recs);
-  let htmlAll=''; let total=0;
+  let htmlAll='';
   const H = s => '<div style="margin:8px 12px 2px;font-size:12px;color:var(--accent);font-weight:700">'+s+'</div>';
   const DIV = '<div style="margin:8px 12px 10px;border-top:2px dashed var(--line)"></div>';
-
-  // 全員選択時は「製品別（支店全体）」のみ表示（得意先明細は出さない／全製品確認用）
+  const holNote = () => months.filter(isFuture).length
+      ? '差し引く月＝<b>'+months.filter(isFuture).map(ymLabel).join('・')+'</b>（実績最終月 '+ymLabel(LAST_ACTUAL)+' より後＝見込）。要製造数＝見込計−有効在庫。　<span class="shorttag">赤</span>=不足／<span class="wtag">直近3ヶ月0</span>=前年実績あり・直近3か月の出荷ゼロ。'
+      : '<span style="color:#c00">未来月（'+ymLabel(LAST_ACTUAL)+'より後）が未選択のため要製造数は0です。対象月に先の月を追加してください。</span>';
   const isAll = sel.tanto.size === D.tantos.length;
-  if(isAll){
+
+  // 長期連休前チェックON：製造必要数（製品ごと・支店全体）のみ表示（得意先明細は出さない）
+  if(sel.holiday){
     const items=consolidateByHinban(new Set(recs.map(r=>r.hinban)), months);
-    htmlAll += H('■ 製品別（支店全体）'+(sel.holiday?'：長期連休前 製造必要数':''));
-    if(sel.holiday){
-      const {html,futCount}=renderHolidayBlock(months, items, true);   // 担当者列を追加
-      const note = futCount
-        ? '差し引く月＝<b>'+months.filter(isFuture).map(ymLabel).join('・')+'</b>（実績最終月 '+ymLabel(LAST_ACTUAL)+' より後＝見込）。要製造数＝見込計−有効在庫。　<span class="shorttag">赤</span>=不足／<span class="wtag">直近3ヶ月0</span>=前年実績あり・直近3か月の出荷ゼロ。'
-        : '<span style="color:#c00">未来月（'+ymLabel(LAST_ACTUAL)+'より後）が未選択のため要製造数は0です。対象月に先の月を追加してください。</span>';
-      htmlAll += '<div style="margin:2px 12px 6px;font-size:11px;color:var(--muted)">'+note+'</div>'+html;
-    } else {
-      fyKeys.forEach(f=>{ const bm=fyMap.get(f); const {html,grand}=renderConsolBlock(bm,items); if(grand.sum===0) return;
-        htmlAll+='<div class="yearblock"><div class="yeartitle">製品別 '+f+'年度（'+f+'/04〜'+(f+1)+'/03）　合計 '+fmt(grand.sum)+' cs</div>'+html+'</div>'; });
-    }
+    const {html}=renderHolidayBlock(months, items, isAll);   // 全員時は担当者列を追加
+    htmlAll += H('■ 長期連休前 製造必要数チェック（製品ごと・支店全体）'+(isAll?'：全員':''))+
+      '<div style="margin:2px 12px 6px;font-size:11px;color:var(--muted)">'+holNote()+'</div>'+html;
     host.innerHTML=htmlAll;
-    document.getElementById('count').textContent=`全員 ／ 品番 ${items.length} ／ 対象月 ${months.length}`;
+    document.getElementById('count').textContent=`${isAll?'全員':'絞込'} ／ 品番 ${items.length} ／ 対象月 ${months.length}`;
     return;
   }
 
-  // 長期連休前チェック（製品ごと・支店全体／未来選択月の見込 − 有効在庫 ＝ 要製造数）
-  if(sel.holiday){
-    const hin=new Set(recs.map(r=>r.hinban));
-    const items=consolidateByHinban(hin, months);
-    const {html,futCount,rowCount}=renderHolidayBlock(months, items);
-    const note = futCount
-      ? '差し引く月＝<b>'+months.filter(isFuture).map(ymLabel).join('・')+'</b>（実績最終月 '+ymLabel(LAST_ACTUAL)+' より後＝見込）。要製造数＝見込計−有効在庫。'
-      : '<span style="color:#c00">未来月（'+ymLabel(LAST_ACTUAL)+'より後）が選択されていません。差し引く月が無いため要製造数は0です。対象月に先の月を追加してください。</span>';
-    htmlAll+='<div style="margin:6px 12px 0;font-size:12px;color:var(--accent);font-weight:700">■ 長期連休前 製造必要数チェック（製品ごと・支店全体）</div>'+
-      '<div style="margin:2px 12px 6px;font-size:11px;color:var(--muted)">'+note+'</div>'+
-      html+
-      '<div style="margin:8px 12px 10px;border-top:2px dashed var(--line)"></div>'+
-      '<div style="margin:6px 12px 0;font-size:12px;color:var(--accent);font-weight:700">■ 絞り込み明細（担当者＞得意先＞製品）</div>';
+  // 全員選択時（長期連休前OFF）：製品別（支店全体）のみ・横並び1表
+  if(isAll){
+    const items=consolidateByHinban(new Set(recs.map(r=>r.hinban)), months);
+    const {html,grand}=renderConsolBlock(months, items);
+    htmlAll += H('■ 製品別（支店全体）')+'<div class="yearblock">'+html+'</div>';
+    host.innerHTML=htmlAll;
+    document.getElementById('count').textContent=`全員 ／ 品番 ${items.length} ／ 対象月 ${months.length} ／ 合計 ${fmt(grand.sum)} cs`;
+    return;
   }
-  // 東京支店合計セクション（製品ごと・他担当者にも実績がある品番のみ）
-  else if(sel.showConsol){
+
+  // 通常：東京支店合計（任意）＋ 絞り込み明細（担当者＞得意先＞製品）。いずれも横並び1表。
+  if(sel.showConsol){
     if(qhin.size){
       const items=consolidateByHinban(qhin, months);
-      let consol='';
-      fyKeys.forEach(f=>{
-        const bm=fyMap.get(f);
-        const {html,grand}=renderConsolBlock(bm,items);
-        if(grand.sum===0) return;   // 期間内実績0の年度は非表示
-        consol+='<div class="yearblock"><div class="yeartitle">【東京支店合計】'+f+'年度（'+f+'/04〜'+(f+1)+'/03）　合計 '+fmt(grand.sum)+' cs</div>'+html+'</div>';
-      });
-      htmlAll+='<div style="margin:6px 12px 0;font-size:12px;color:var(--accent);font-weight:700">■ 東京支店合計（絞り込み担当者の品番のうち、他担当者にも実績がある製品を品番ごとに支店全体で合計）</div>'+consol+
-        '<div style="margin:4px 12px 10px;border-top:2px dashed var(--line)"></div>'+
-        '<div style="margin:6px 12px 0;font-size:12px;color:var(--accent);font-weight:700">■ 絞り込み明細（担当者＞得意先＞製品）　<span class="cmark">★</span>=東京支店合計の対象</div>';
+      const {html,grand}=renderConsolBlock(months, items);
+      if(grand.sum>0){
+        htmlAll+= H('■ 東京支店合計（絞り込み担当者の品番のうち、他担当者にも実績がある製品を品番ごとに支店全体で合計）')+
+          '<div class="yearblock">'+html+'</div>'+DIV+
+          H('■ 絞り込み明細（担当者＞得意先＞製品）　<span class="cmark">★</span>=東京支店合計の対象');
+      }
     } else {
-      htmlAll+='<div style="margin:8px 12px;color:var(--muted);font-size:12px">東京支店合計の対象製品はありません（絞り込み担当者以外で同一品番の実績なし、または担当者を全員選択中）。</div>';
+      htmlAll+='<div style="margin:8px 12px;color:var(--muted);font-size:12px">東京支店合計の対象製品はありません（絞り込み担当者以外で同一品番の実績なし）。</div>';
     }
   }
 
-  let shown=0;
-  fyKeys.forEach(f=>{
-    const bm=fyMap.get(f);
-    const {html,grand}=renderBlock(bm,tree,qhin);
-    if(grand.sum===0) return;   // 期間内実績0の年度は非表示
-    htmlAll+='<div class="yearblock"><div class="yeartitle">'+f+'年度（'+f+'/04〜'+(f+1)+'/03）　対象'+bm.length+'か月　合計 '+fmt(grand.sum)+' cs</div>'+html+'</div>';
-    total+=grand.sum; shown++;
-  });
-  if(!shown && !total) htmlAll+='<div class="empty">選択した期間に実績のある製品はありません。対象月を変更してください。</div>';
+  const {html,grand}=renderBlock(months, tree, qhin);
+  if(grand.sum>0) htmlAll += '<div class="yearblock">'+html+'</div>';
+  else htmlAll += '<div class="empty">選択した期間に実績のある製品はありません。対象月を変更してください。</div>';
   host.innerHTML=htmlAll;
-  document.getElementById('count').textContent=`表示 ${recs.length} 明細 ／ 対象月 ${months.length} ／ 合計 ${fmt(total)} cs`;
+  document.getElementById('count').textContent=`表示 ${recs.length} 明細 ／ 対象月 ${months.length} ／ 合計 ${fmt(grand.sum)} cs`;
 }
 
 // Excel出力：先頭=チェックリスト一覧、以降=得意先ごとのシート
@@ -577,50 +556,40 @@ function checklistSheet(ed){
   return {name:'チェックリスト', rows, cols:[4,14,30,16,12,42,12]};
 }
 function customerSheet(c,ed,used){
+  const M=ed.months;
   const rows=[];
   rows.push([[c.kname+' ('+c.kcode+')',10]]);
   rows.push([['担当者: '+c.tanto.replace(/　/g,' ')+'　／　★=東京支店合計の対象（他担当者にも実績あり）',0]]);
-  let ncols=3;
-  ed.fyList.forEach(({f,bm})=>{
-    const its=c.items.map(r=>({r,rs:rowSum(r,bm)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs);
-    if(!its.length) return;   // 期間内実績0の年度は非表示
-    ncols=Math.max(ncols,bm.length+3);
-    rows.push([]);
-    rows.push([[f+'年度（'+f+'/04〜'+(f+1)+'/03）',11]]);
-    const hdr=[['品番',2],['製品',2]]; bm.forEach(mo=>hdr.push([ymLabel(mo)+(isFuture(mo)?'(前年)':''), isFuture(mo)?14:3])); hdr.push(['合計',3]); rows.push(hdr);
-    const tot={}; let tsum=0;
-    its.forEach(({r,rs})=>{
-      const mk=ed.qualify.has(r.hinban)?'★ ':'';
-      const ir=[[r.hinban,8],[mk+r.hinmei+(r.ended?' [終売]':''),8]];
-      bm.forEach(mo=>{const v=val(r,mo); ir.push([v, isFuture(mo)?15:9]); if(v){tot[mo]=(tot[mo]||0)+v; tsum+=v;}});
-      ir.push([rs,9]); rows.push(ir);
-    });
-    const gr=[['得意先 合計',12],['',12]]; bm.forEach(mo=>gr.push([tot[mo]||0,13])); gr.push([tsum,13]); rows.push(gr);
+  rows.push([]);
+  const hdr=[['品番',2],['製品',2]]; M.forEach(mo=>hdr.push([ymLabel(mo)+(isFuture(mo)?'(前年)':''), isFuture(mo)?14:3])); hdr.push(['合計',3]); rows.push(hdr);
+  const tot={}; let tsum=0;
+  c.items.map(r=>({r,rs:rowSum(r,M)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs).forEach(({r,rs})=>{
+    const mk=ed.qualify.has(r.hinban)?'★ ':'';
+    const ir=[[r.hinban,8],[mk+r.hinmei+(r.ended?' [終売]':''),8]];
+    M.forEach(mo=>{const v=val(r,mo); ir.push([v, isFuture(mo)?15:9]); if(v){tot[mo]=(tot[mo]||0)+v; tsum+=v;}});
+    ir.push([rs,9]); rows.push(ir);
   });
-  const cols=[12,46]; for(let i=2;i<ncols;i++) cols.push(10.5);
+  const gr=[['得意先 合計',12],['',12]]; M.forEach(mo=>gr.push([tot[mo]||0,13])); gr.push([tsum,13]); rows.push(gr);
+  const cols=[12,46]; for(let i=0;i<M.length+1;i++) cols.push(10.5);
   return {name:sheetName(c.kname,used), rows, cols};
 }
 function consolSheet(ed){
-  const items=consolidateByHinban(ed.qualify, ed.months);
+  const M=ed.months;
+  const items=consolidateByHinban(ed.qualify, M);
   const rows=[];
   rows.push([['東京支店合計（製品ごと・他担当者にも実績がある製品を支店全体で合計）',10]]);
-  rows.push([['対象期間: '+ymLabel(ed.months[0])+'〜'+ymLabel(ed.months[ed.months.length-1])+'　／　更新: '+D.generated,0]]);
+  rows.push([['対象期間: '+ymLabel(M[0])+'〜'+ymLabel(M[M.length-1])+'　／　更新: '+D.generated,0]]);
   if(!items.length) rows.push([['対象製品はありません（絞り込み担当者以外で同一品番の実績なし、または担当者を全員選択中）。',0]]);
-  let ncols=3;
-  ed.fyList.forEach(({f,bm})=>{
-    ncols=Math.max(ncols,bm.length+3);
-    rows.push([]);
-    rows.push([[f+'年度（'+f+'/04〜'+(f+1)+'/03）',11]]);
-    const hdr=[['品番',2],['製品',2]]; bm.forEach(mo=>hdr.push([ymLabel(mo)+(isFuture(mo)?'(前年)':''), isFuture(mo)?14:3])); hdr.push(['合計',3]); rows.push(hdr);
-    const tot={}; let tsum=0;
-    items.map(it=>({it,rs:bm.reduce((s,mo)=>s+(it.m[mo]||0),0)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs).forEach(({it,rs})=>{
-      const ir=[[it.hinban,8],[it.hinmei+(it.ended?' [終売]':''),8]];
-      bm.forEach(mo=>{const v=it.m[mo]||0; ir.push([v, isFuture(mo)?15:9]); if(v){tot[mo]=(tot[mo]||0)+v; tsum+=v;}});
-      ir.push([rs,9]); rows.push(ir);
-    });
-    const gr=[['合計',12],['',12]]; bm.forEach(mo=>gr.push([tot[mo]||0,13])); gr.push([tsum,13]); rows.push(gr);
+  rows.push([]);
+  const hdr=[['品番',2],['製品',2]]; M.forEach(mo=>hdr.push([ymLabel(mo)+(isFuture(mo)?'(前年)':''), isFuture(mo)?14:3])); hdr.push(['合計',3]); rows.push(hdr);
+  const tot={}; let tsum=0;
+  items.map(it=>({it,rs:M.reduce((s,mo)=>s+(it.m[mo]||0),0)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs).forEach(({it,rs})=>{
+    const ir=[[it.hinban,8],[it.hinmei+(it.ended?' [終売]':''),8]];
+    M.forEach(mo=>{const v=it.m[mo]||0; ir.push([v, isFuture(mo)?15:9]); if(v){tot[mo]=(tot[mo]||0)+v; tsum+=v;}});
+    ir.push([rs,9]); rows.push(ir);
   });
-  const cols=[12,46]; for(let i=2;i<ncols;i++) cols.push(10.5);
+  const gr=[['合計',12],['',12]]; M.forEach(mo=>gr.push([tot[mo]||0,13])); gr.push([tsum,13]); rows.push(gr);
+  const cols=[12,46]; for(let i=0;i<M.length+1;i++) cols.push(10.5);
   return {name:'東京支店合計', rows, cols};
 }
 
@@ -758,17 +727,17 @@ function downloadXlsx(){
   if(!ed){ alert('表示中のデータがありません。担当者と対象月を選択してください。'); return; }
   const used=new Set();
   const isAllExport = sel.tanto.size === D.tantos.length;
-  const sheets=[checklistSheet(ed)];
-  // 長期連休前チェックがONのときだけ「製造必要数」シートを追加（全員時は担当者列付き）
+  let sheets;
   if(sel.holiday){
-    sheets.push(holidaySheet(ed, isAllExport));
-  }
-  if(isAllExport){
-    // 全員：製品別・担当者別のみ（得意先別シートは作らない）
+    // 長期連休前ON：製造必要数シートのみ（チェックリスト・明細なし／全員時は担当者列付き）
+    sheets=[ holidaySheet(ed, isAllExport) ];
   } else {
-    const custsWithData=ed.custs.filter(c=>c.items.some(r=>ed.months.some(m=>val(r,m))));
-    if(custsWithData.length>80 && !confirm(custsWithData.length+'件の得意先を個別シートに出力します（時間がかかる場合があります）。よろしいですか？')) return;
-    sheets.push(consolSheet(ed), ...custsWithData.map(c=>customerSheet(c,ed,used)));
+    sheets=[ checklistSheet(ed) ];
+    if(!isAllExport){
+      const custsWithData=ed.custs.filter(c=>c.items.some(r=>ed.months.some(m=>val(r,m))));
+      if(custsWithData.length>80 && !confirm(custsWithData.length+'件の得意先を個別シートに出力します（時間がかかる場合があります）。よろしいですか？')) return;
+      sheets.push(consolSheet(ed), ...custsWithData.map(c=>customerSheet(c,ed,used)));
+    }
   }
   const a=document.createElement('a'); a.href=URL.createObjectURL(makeZip(buildXlsxFiles(sheets)));
   a.download='PB実績_'+new Date().toISOString().slice(0,10)+'.xlsx'; a.click();
