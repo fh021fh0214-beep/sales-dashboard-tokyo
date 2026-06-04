@@ -61,6 +61,10 @@
   .clk:hover{text-decoration-color:var(--accent2);color:var(--accent)}
   .badge{display:inline-block;font-size:10px;background:#ffe1e1;color:#b00;border-radius:4px;padding:0 5px;margin-left:6px}
   .cmark{color:#d08700;margin-left:5px;font-weight:700}
+  thead th.fut{background:#e3edff;color:#1c4ea8;border-bottom-color:#9fc0ff}
+  td.fut{background:#f2f7ff;color:#1c4ea8;font-style:italic}
+  td.fut.tot{background:#eaf1ff}
+  .futtag{display:inline-block;font-size:9px;background:#1c4ea8;color:#fff;border-radius:3px;padding:0 3px;margin-left:4px;font-style:normal;font-weight:700;vertical-align:middle}
   .empty{padding:46px;text-align:center;color:var(--muted);font-size:13px}
   .legend{font-size:11px;color:var(--muted)}
   .count{font-size:11px;color:var(--muted);margin-left:auto}
@@ -152,7 +156,7 @@
       <span class="count" id="count"></span>
     </div>
     <div id="tblHost"></div>
-    <div class="legend" style="margin:6px 12px 10px">数値はケース数（cs）。空欄・0は実績なし。<span class="badge">終売</span>＝標準ロット一覧で削除候補（〇）の品。</div>
+    <div class="legend" style="margin:6px 12px 10px">数値はケース数（cs）。空欄・0は実績なし。<span class="badge">終売</span>＝標準ロット一覧で削除候補（〇）の品。<br><span class="futtag">前年</span> の付いた月（<span style="color:#1c4ea8">青字</span>）は実績がまだ無い未来月で、<b>前年同月の実績を見込として表示</b>しています。</div>
   </div>
 </div>
 
@@ -177,7 +181,18 @@ const D = window.PB_DATA;
 const fmt = n => n ? Math.round(n).toLocaleString() : 0;
 const ymLabel = ym => ym.slice(0,4)+'/'+ym.slice(4);
 const ymShort = ym => ym.slice(2,4)+'/'+(+ym.slice(4));
-const ymHead = ym => '<span class="ymfull">'+ymLabel(ym)+'</span><span class="ymshort">'+ymShort(ym)+'</span>';
+// 実績の最終月（これより後の月は「未来＝前年実績ベースの見込」として扱う）
+let LAST_ACTUAL='';
+(function(){ const s=new Set(); D.records.forEach(r=>{ for(const m in r.months){ if(r.months[m]) s.add(m); } }); LAST_ACTUAL=D.months.filter(m=>s.has(m)).pop()||''; })();
+const prevYM = ym => String(+ym.slice(0,4)-1)+ym.slice(4);   // 前年同月
+const isFuture = ym => !!LAST_ACTUAL && ym>LAST_ACTUAL;
+// 値の取得：未来月は前年同月の実績を返す（見込）
+const val = (r,ym) => (isFuture(ym) ? r.months[prevYM(ym)] : r.months[ym]) || 0;
+const ymHead = ym => isFuture(ym)
+  ? '<span class="ymfull">'+ymLabel(ym)+'<span class="futtag">前年</span></span><span class="ymshort">'+ymShort(ym)+'<span class="futtag">前</span></span>'
+  : '<span class="ymfull">'+ymLabel(ym)+'</span><span class="ymshort">'+ymShort(ym)+'</span>';
+const monthTh = m => '<th'+(isFuture(m)?' class="fut"':'')+'>'+ymHead(m)+'</th>';
+const fcls = mo => isFuture(mo)?'fut':'';   // 未来月セル用クラス
 // 製品ラベル: 品番／製品コード（ＢＥ-９２９等）／製品名 をspanに分割（スマホでは前2つを非表示）
 const _codeRe=/^([０-９Ａ-Ｚ][０-９Ａ-Ｚ]*[－ー\-][０-９][０-９Ａ-Ｚ]*)([\s　]*)([\s\S]*)$/;
 function prodLabel(hinban, hinmei){
@@ -272,7 +287,7 @@ function filtered(){
     return true;
   });
 }
-function rowSum(r,months){ let s=0; months.forEach(m=>{const v=r.months[m]; if(v) s+=v;}); return s; }
+function rowSum(r,months){ let s=0; months.forEach(m=>{const v=val(r,m); if(v) s+=v;}); return s; }
 
 // ---- グルーピング（担当者 > 得意先 > 製品）----
 function buildTree(recs){
@@ -290,31 +305,31 @@ function buildTree(recs){
 function renderBlock(months, tree, qhin){
   const cell=(v,cls='')=>`<td class="num ${v?'':'zero'} ${cls}">${fmt(v)}</td>`;
   let head='<thead><tr><th class="lbl colhin">担当者 / 得意先 / 製品</th>';
-  months.forEach(m=>head+='<th>'+ymHead(m)+'</th>'); head+='<th class="tot">合計</th></tr></thead>';
+  months.forEach(m=>head+=monthTh(m)); head+='<th class="tot">合計</th></tr></thead>';
   let body='<tbody>';
   const grand={m:{},sum:0};
   [...tree.values()].sort((a,b)=>D.tantos.indexOf(a.name)-D.tantos.indexOf(b.name)).forEach(T=>{
     const tm={}; let tsum=0;
     const ksArr=[...T.ks.values()].map(K=>{
       const km={}; let ksum=0;
-      K.items.forEach(r=>months.forEach(mo=>{const v=r.months[mo]; if(v){km[mo]=(km[mo]||0)+v;ksum+=v;tm[mo]=(tm[mo]||0)+v;tsum+=v;}}));
+      K.items.forEach(r=>months.forEach(mo=>{const v=val(r,mo); if(v){km[mo]=(km[mo]||0)+v;ksum+=v;tm[mo]=(tm[mo]||0)+v;tsum+=v;}}));
       return {K,km,ksum};
     });
     if(tsum===0) return;   // 期間内実績0の担当者は非表示
     months.forEach(mo=>{grand.m[mo]=(grand.m[mo]||0)+(tm[mo]||0);}); grand.sum+=tsum;
     body+='<tr class="tanto"><td class="colhin">'+T.name.replace(/　/g,' ')+'</td>';
-    months.forEach(mo=>body+=cell(tm[mo])); body+=cell(tsum,'tot')+'</tr>';
+    months.forEach(mo=>body+=cell(tm[mo],fcls(mo))); body+=cell(tsum,'tot')+'</tr>';
     ksArr.filter(x=>x.ksum>0).sort((a,b)=>b.ksum-a.ksum).forEach(({K,km,ksum})=>{
       body+='<tr class="ksub"><td class="colhin"><span class="indent">└</span><span class="clk" data-kfilter="'+K.code+'" data-kname="'+K.name.replace(/"/g,'&quot;')+'">'+K.name+'<span class="kcode"> ('+K.code+')</span></span></td>';
-      months.forEach(mo=>body+=cell(km[mo])); body+=cell(ksum,'tot')+'</tr>';
+      months.forEach(mo=>body+=cell(km[mo],fcls(mo))); body+=cell(ksum,'tot')+'</tr>';
       K.items.map(r=>({r,rs:rowSum(r,months)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs).forEach(({r,rs})=>{
         body+='<tr class="item"><td class="colhin"><span class="indent">　・</span><span class="clk" data-pfilter="'+r.hinmei.replace(/"/g,'&quot;')+'">'+prodLabel(r.hinban,r.hinmei)+'</span>'+(qhin&&qhin.has(r.hinban)?'<span class="cmark" title="東京支店合計の対象（他担当者にも実績あり）">★</span>':'')+(r.ended?'<span class="badge">終売</span>':'')+'</td>';
-        months.forEach(mo=>body+=cell(r.months[mo])); body+=cell(rs,'tot')+'</tr>';
+        months.forEach(mo=>body+=cell(val(r,mo),fcls(mo))); body+=cell(rs,'tot')+'</tr>';
       });
     });
   });
   body+='<tr class="tanto"><td class="colhin">総合計</td>';
-  months.forEach(mo=>body+=cell(grand.m[mo])); body+=cell(grand.sum,'tot')+'</tr></tbody>';
+  months.forEach(mo=>body+=cell(grand.m[mo],fcls(mo))); body+=cell(grand.sum,'tot')+'</tr></tbody>';
   return {html:'<div class="tablewrap"><table>'+head+body+'</table></div>', grand};
 }
 
@@ -327,7 +342,7 @@ function qualifySet(months, recs){
   D.records.forEach(r=>{
     if(sel.tanto.has(r.tanto)) return;        // 選択担当者は除外（＝他担当者のみ）
     if(!inScope.has(r.hinban)) return;
-    for(const mo of months){ if(r.months[mo]){ other.add(r.hinban); break; } }
+    for(const mo of months){ if(val(r,mo)){ other.add(r.hinban); break; } }
   });
   return other;
 }
@@ -337,22 +352,22 @@ function consolidateByHinban(hinSet, months){
     if(!hinSet.has(r.hinban)) return;
     let e=map.get(r.hinban);
     if(!e){ e={hinban:r.hinban,hinmei:r.hinmei,ended:r.ended,m:{}}; map.set(r.hinban,e); }
-    months.forEach(mo=>{const v=r.months[mo]; if(v) e.m[mo]=(e.m[mo]||0)+v;});
+    months.forEach(mo=>{const v=val(r,mo); if(v) e.m[mo]=(e.m[mo]||0)+v;});
   });
   return [...map.values()];
 }
 function renderConsolBlock(months, items){
   const cell=(v,cls='')=>`<td class="num ${v?'':'zero'} ${cls}">${fmt(v)}</td>`;
   let head='<thead><tr><th class="lbl colhin">製品（全社合算）</th>';
-  months.forEach(m=>head+='<th>'+ymHead(m)+'</th>'); head+='<th class="tot">合計</th></tr></thead>';
+  months.forEach(m=>head+=monthTh(m)); head+='<th class="tot">合計</th></tr></thead>';
   let body='<tbody>'; const g={m:{},sum:0};
   items.map(it=>({it,rs:months.reduce((s,mo)=>s+(it.m[mo]||0),0)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs).forEach(({it,rs})=>{
     months.forEach(mo=>{const v=it.m[mo]; if(v) g.m[mo]=(g.m[mo]||0)+v;}); g.sum+=rs;
     body+='<tr class="item"><td class="colhin">'+prodLabel(it.hinban,it.hinmei)+(it.ended?'<span class="badge">終売</span>':'')+'</td>';
-    months.forEach(mo=>body+=cell(it.m[mo])); body+=cell(rs,'tot')+'</tr>';
+    months.forEach(mo=>body+=cell(it.m[mo],fcls(mo))); body+=cell(rs,'tot')+'</tr>';
   });
   body+='<tr class="tanto"><td class="colhin">合算 合計</td>';
-  months.forEach(mo=>body+=cell(g.m[mo])); body+=cell(g.sum,'tot')+'</tr></tbody>';
+  months.forEach(mo=>body+=cell(g.m[mo],fcls(mo))); body+=cell(g.sum,'tot')+'</tr></tbody>';
   return {html:'<div class="tablewrap"><table>'+head+body+'</table></div>', grand:g};
 }
 
@@ -453,12 +468,12 @@ function customerSheet(c,ed,used){
     ncols=Math.max(ncols,bm.length+3);
     rows.push([]);
     rows.push([[f+'年度（'+f+'/04〜'+(f+1)+'/03）',11]]);
-    const hdr=[['品番',2],['製品',2]]; bm.forEach(mo=>hdr.push([ymLabel(mo),3])); hdr.push(['合計',3]); rows.push(hdr);
+    const hdr=[['品番',2],['製品',2]]; bm.forEach(mo=>hdr.push([ymLabel(mo)+(isFuture(mo)?'(前年)':''), isFuture(mo)?14:3])); hdr.push(['合計',3]); rows.push(hdr);
     const tot={}; let tsum=0;
     its.forEach(({r,rs})=>{
       const mk=ed.qualify.has(r.hinban)?'★ ':'';
       const ir=[[r.hinban,8],[mk+r.hinmei+(r.ended?' [終売]':''),8]];
-      bm.forEach(mo=>{const v=r.months[mo]||0; ir.push([v,9]); if(v){tot[mo]=(tot[mo]||0)+v; tsum+=v;}});
+      bm.forEach(mo=>{const v=val(r,mo); ir.push([v, isFuture(mo)?15:9]); if(v){tot[mo]=(tot[mo]||0)+v; tsum+=v;}});
       ir.push([rs,9]); rows.push(ir);
     });
     const gr=[['得意先 合計',12],['',12]]; bm.forEach(mo=>gr.push([tot[mo]||0,13])); gr.push([tsum,13]); rows.push(gr);
@@ -477,11 +492,11 @@ function consolSheet(ed){
     ncols=Math.max(ncols,bm.length+3);
     rows.push([]);
     rows.push([[f+'年度（'+f+'/04〜'+(f+1)+'/03）',11]]);
-    const hdr=[['品番',2],['製品',2]]; bm.forEach(mo=>hdr.push([ymLabel(mo),3])); hdr.push(['合計',3]); rows.push(hdr);
+    const hdr=[['品番',2],['製品',2]]; bm.forEach(mo=>hdr.push([ymLabel(mo)+(isFuture(mo)?'(前年)':''), isFuture(mo)?14:3])); hdr.push(['合計',3]); rows.push(hdr);
     const tot={}; let tsum=0;
     items.map(it=>({it,rs:bm.reduce((s,mo)=>s+(it.m[mo]||0),0)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs).forEach(({it,rs})=>{
       const ir=[[it.hinban,8],[it.hinmei+(it.ended?' [終売]':''),8]];
-      bm.forEach(mo=>{const v=it.m[mo]||0; ir.push([v,9]); if(v){tot[mo]=(tot[mo]||0)+v; tsum+=v;}});
+      bm.forEach(mo=>{const v=it.m[mo]||0; ir.push([v, isFuture(mo)?15:9]); if(v){tot[mo]=(tot[mo]||0)+v; tsum+=v;}});
       ir.push([rs,9]); rows.push(ir);
     });
     const gr=[['合計',12],['',12]]; bm.forEach(mo=>gr.push([tot[mo]||0,13])); gr.push([tsum,13]); rows.push(gr);
@@ -514,22 +529,25 @@ function makeZip(files){
 const STYLES_XML='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
 '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
 '<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0"/></numFmts>'+
-'<fonts count="4">'+
+'<fonts count="6">'+
 '<font><sz val="11"/><name val="Yu Gothic"/></font>'+
 '<font><b/><sz val="11"/><name val="Yu Gothic"/></font>'+
 '<font><b/><sz val="14"/><color rgb="FF0B6E4F"/><name val="Yu Gothic"/></font>'+
-'<font><b/><sz val="12"/><color rgb="FF0B6E4F"/><name val="Yu Gothic"/></font></fonts>'+
-'<fills count="6">'+
+'<font><b/><sz val="12"/><color rgb="FF0B6E4F"/><name val="Yu Gothic"/></font>'+
+'<font><b/><sz val="11"/><color rgb="FF1C4EA8"/><name val="Yu Gothic"/></font>'+
+'<font><i/><sz val="11"/><color rgb="FF1C4EA8"/><name val="Yu Gothic"/></font></fonts>'+
+'<fills count="7">'+
 '<fill><patternFill patternType="none"/></fill>'+
 '<fill><patternFill patternType="gray125"/></fill>'+
 '<fill><patternFill patternType="solid"><fgColor rgb="FFFFF6C2"/></patternFill></fill>'+
 '<fill><patternFill patternType="solid"><fgColor rgb="FFDFF0E6"/></patternFill></fill>'+
 '<fill><patternFill patternType="solid"><fgColor rgb="FFEEF6F1"/></patternFill></fill>'+
-'<fill><patternFill patternType="solid"><fgColor rgb="FFCFE9D8"/></patternFill></fill></fills>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FFCFE9D8"/></patternFill></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FFDBE7FF"/></patternFill></fill></fills>'+
 '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+
 '<border><left/><right/><top/><bottom style="thin"><color rgb="FFE7D96A"/></bottom><diagonal/></border></borders>'+
 '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
-'<cellXfs count="14">'+
+'<cellXfs count="16">'+
 '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+
 '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
 '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left"/></xf>'+
@@ -544,6 +562,8 @@ const STYLES_XML='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
 '<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>'+
 '<xf numFmtId="0" fontId="1" fillId="5" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="left"/></xf>'+
 '<xf numFmtId="164" fontId="1" fillId="5" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
+'<xf numFmtId="0" fontId="4" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center"/></xf>'+
+'<xf numFmtId="164" fontId="5" fillId="6" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
 '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
 
 function sheetXml(sheet){
@@ -587,7 +607,7 @@ function downloadXlsx(){
   if(!ed){ alert('表示中のデータがありません。担当者と対象月を選択してください。'); return; }
   const used=new Set();
   // 得意先別シートは期間内実績>0の得意先のみ（チェックリストは全件記載）
-  const custsWithData=ed.custs.filter(c=>c.items.some(r=>ed.months.some(m=>r.months[m])));
+  const custsWithData=ed.custs.filter(c=>c.items.some(r=>ed.months.some(m=>val(r,m))));
   if(custsWithData.length>80 && !confirm(custsWithData.length+'件の得意先を個別シートに出力します（時間がかかる場合があります）。よろしいですか？')) return;
   const sheets=[checklistSheet(ed), consolSheet(ed), ...custsWithData.map(c=>customerSheet(c,ed,used))];
   const a=document.createElement('a'); a.href=URL.createObjectURL(makeZip(buildXlsxFiles(sheets)));
