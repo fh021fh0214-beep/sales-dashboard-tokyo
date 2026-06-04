@@ -75,7 +75,10 @@
   tr.item.shortrow td.colhin{background:#ffecec}
   tr.item.warnrow td{background:#fff6d5}
   tr.item.warnrow td.colhin{background:#fff6d5}
+  tr.item.newrow td{background:#e6eeff}
+  tr.item.newrow td.colhin{background:#e6eeff}
   .wtag{display:inline-block;font-size:9px;background:#caa400;color:#fff;border-radius:3px;padding:0 4px;margin-left:5px;font-weight:700;vertical-align:middle}
+  .ntag{display:inline-block;font-size:9px;background:#1c4ea8;color:#fff;border-radius:3px;padding:0 4px;margin-left:5px;font-weight:700;vertical-align:middle}
   .shorttag{display:inline-block;font-size:11px;background:#ffd6d6;color:#c00;border-radius:3px;padding:0 5px;font-weight:700}
   .empty{padding:46px;text-align:center;color:var(--muted);font-size:13px}
   .legend{font-size:11px;color:var(--muted)}
@@ -224,8 +227,17 @@ D.records.forEach(r=>{ let a=ACT[r.hinban]||(ACT[r.hinban]={prev:0,recent:0});
   for(const m in r.months){ const v=r.months[m]; if(!v) continue;
     if(fiscalYear(m)===FY_CUR-1) a.prev+=v;
     if(RECENT3.indexOf(m)>=0) a.recent+=v; } });
-// 行ステータス: 不足→short(赤) / 前年あり&直近3か月ゼロ→warn(黄) / それ以外→''(既定)
-const rowStatus = (hinban, need) => { if(need>0) return 'short'; const a=ACT[hinban]; return (a && a.prev>0 && a.recent===0) ? 'warn' : ''; };
+// 行ステータス（優先: 赤→青→黄→ブランク）
+//  short(赤)=不足 / new(青)=前年なし&直近3か月あり / warn(黄)=前年あり&直近3か月ゼロ / ''=既定
+const rowStatus = (hinban, need) => {
+  if(need>0) return 'short';
+  const a=ACT[hinban]; if(!a) return '';
+  if(a.prev===0 && a.recent>0) return 'new';
+  if(a.prev>0  && a.recent===0) return 'warn';
+  return '';
+};
+const STATUS_RANK = {short:0, 'new':1, warn:2};
+const statusRank = (hinban, need) => { const s=rowStatus(hinban,need); return (s in STATUS_RANK)?STATUS_RANK[s]:3; };
 
 // ---- 状態（初期は何も選択していない）----
 const sel = { tanto:new Set(), k:new Set(), months:new Set(), pSearch:"", kSearch:"", incEnded:false, showConsol:true, holiday:false };
@@ -411,13 +423,12 @@ function renderHolidayBlock(months, items, showTanto){
     const stock=STOCK[it.hinban]||0;
     return {it, demand, stock, need:Math.max(0, demand-stock)};
   }).filter(x=> x.demand>0 || x.stock>0 || months.some(mo=>x.it.m[mo]));
-  // 並び順：赤(不足)→黄(前年あり直近3か月0)→既定、各グループ内は製造必要数(需要)が多い順
-  const rnk=x=>{const s=rowStatus(x.it.hinban,x.need); return s==='short'?0:s==='warn'?1:2;};
-  rows.sort((a,b)=> rnk(a)-rnk(b) || b.need-a.need || b.demand-a.demand);
+  // 並び順：赤(不足)→青(新規)→黄(前年あり直近0)→ブランク、各グループ内は需要が多い順
+  rows.sort((a,b)=> statusRank(a.it.hinban,a.need)-statusRank(b.it.hinban,b.need) || b.need-a.need || b.demand-a.demand);
   let body='<tbody>';
   rows.forEach(({it,demand,stock,need})=>{
     const st=rowStatus(it.hinban, need);
-    body+='<tr class="item'+(st?' '+st+'row':'')+'"><td class="colhin">'+prodLabel(it.hinban,it.hinmei)+(it.ended?'<span class="badge">終売</span>':'')+(st==='warn'?'<span class="wtag">直近3ヶ月0</span>':'')+'</td>';
+    body+='<tr class="item'+(st?' '+st+'row':'')+'"><td class="colhin">'+prodLabel(it.hinban,it.hinmei)+(it.ended?'<span class="badge">終売</span>':'')+(st==='new'?'<span class="ntag">新規</span>':'')+(st==='warn'?'<span class="wtag">直近3ヶ月0</span>':'')+'</td>';
     if(showTanto) body+='<td class="tantocol">'+((PRODTANTO[it.hinban]||'－').replace(/　/g,' '))+'</td>';
     months.forEach(mo=>body+=cell(it.m[mo],fcls(mo)));
     body+=cell(demand,'tot')+'<td class="num stock">'+fmt(stock)+'</td><td class="num need'+(need>0?' short':'')+'">'+fmt(need)+'</td></tr>';
@@ -476,7 +487,7 @@ function render(){
   const H = s => '<div style="margin:8px 12px 2px;font-size:12px;color:var(--accent);font-weight:700">'+s+'</div>';
   const DIV = '<div style="margin:8px 12px 10px;border-top:2px dashed var(--line)"></div>';
   const holNote = () => months.filter(isFuture).length
-      ? '差し引く月＝<b>'+months.filter(isFuture).map(ymLabel).join('・')+'</b>（実績最終月 '+ymLabel(LAST_ACTUAL)+' より後＝見込）。要製造数＝見込計−有効在庫。　<span class="shorttag">赤</span>=不足／<span class="wtag">直近3ヶ月0</span>=前年実績あり・直近3か月の出荷ゼロ。'
+      ? '差し引く月＝<b>'+months.filter(isFuture).map(ymLabel).join('・')+'</b>（実績最終月 '+ymLabel(LAST_ACTUAL)+' より後＝見込）。要製造数＝見込計−有効在庫。　<span class="shorttag">赤</span>=不足／<span class="ntag">新規</span>=前年なし・直近3か月実績あり／<span class="wtag">直近3ヶ月0</span>=前年あり・直近3か月ゼロ。'
       : '<span style="color:#c00">未来月（'+ymLabel(LAST_ACTUAL)+'より後）が未選択のため要製造数は0です。対象月に先の月を追加してください。</span>';
   const isAll = sel.tanto.size === D.tantos.length;
 
@@ -601,7 +612,7 @@ function holidaySheet(ed, showTanto){
   const items=consolidateByHinban(hin, ed.months);
   const futM=ed.months.filter(isFuture);
   const rows=[];
-  rows.push([['長期連休前 製造必要数（製品ごと・支店全体）　※要製造数=赤/前年あり直近3か月0=黄',10]]);
+  rows.push([['長期連休前 製造必要数（製品ごと・支店全体）　※不足=赤/新規(前年なし直近あり)=青/前年あり直近3か月0=黄',10]]);
   rows.push([['対象期間: '+ymLabel(ed.months[0])+'〜'+ymLabel(ed.months[ed.months.length-1])+'　／　差引月(見込): '+(futM.map(ymLabel).join('・')||'なし')+'　／　更新: '+D.generated,0]]);
   const hdr=[['品番',2],['製品',2]];
   if(showTanto) hdr.push(['担当者',2]);
@@ -609,10 +620,10 @@ function holidaySheet(ed, showTanto){
   hdr.push(['見込計',3],['有効在庫',3],['要製造数',3]); rows.push(hdr);
   const arr=items.map(it=>{ const demand=futM.reduce((s,mo)=>s+(it.m[mo]||0),0); const stock=STOCK[it.hinban]||0; return {it,demand,stock,need:Math.max(0,demand-stock)};})
     .filter(x=> x.demand>0||x.stock>0||ed.months.some(mo=>x.it.m[mo]));
-  arr.sort((a,b)=>b.need-a.need||b.demand-a.demand);
+  arr.sort((a,b)=> statusRank(a.it.hinban,a.need)-statusRank(b.it.hinban,b.need) || b.need-a.need || b.demand-a.demand);
   arr.forEach(({it,demand,stock,need})=>{
     const st=rowStatus(it.hinban, need);
-    const ir=[[it.hinban,8],[it.hinmei+(it.ended?' [終売]':''), st==='warn'?17:8]];
+    const ir=[[it.hinban,8],[it.hinmei+(it.ended?' [終売]':''), st==='warn'?17:st==='new'?18:8]];
     if(showTanto) ir.push([(PRODTANTO[it.hinban]||'－').replace(/　/g,' '),8]);
     ed.months.forEach(mo=>ir.push([it.m[mo]||0, isFuture(mo)?15:9]));
     ir.push([demand,9],[stock,9],[need, need>0?16:9]); rows.push(ir);
@@ -666,7 +677,7 @@ const STYLES_XML='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
 '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+
 '<border><left/><right/><top/><bottom style="thin"><color rgb="FFE7D96A"/></bottom><diagonal/></border></borders>'+
 '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
-'<cellXfs count="18">'+
+'<cellXfs count="19">'+
 '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+
 '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
 '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left"/></xf>'+
@@ -685,6 +696,7 @@ const STYLES_XML='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
 '<xf numFmtId="164" fontId="5" fillId="6" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
 '<xf numFmtId="164" fontId="6" fillId="7" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
 '<xf numFmtId="0" fontId="0" fillId="8" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="left"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="6" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="left"/></xf>'+
 '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
 
 function sheetXml(sheet){
