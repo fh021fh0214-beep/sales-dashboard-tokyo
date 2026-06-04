@@ -65,6 +65,10 @@
   td.fut{background:#f2f7ff;color:#1c4ea8;font-style:italic}
   td.fut.tot{background:#eaf1ff}
   .futtag{display:inline-block;font-size:9px;background:#1c4ea8;color:#fff;border-radius:3px;padding:0 3px;margin-left:4px;font-style:normal;font-weight:700;vertical-align:middle}
+  th.stockcol{background:#eef2f7;color:#333}
+  td.stock{background:#f4f7fb;font-weight:700}
+  td.need{background:#f7faf8;font-weight:700}
+  td.short{background:#ffe1e1;color:#c00;font-weight:700}
   .empty{padding:46px;text-align:center;color:var(--muted);font-size:13px}
   .legend{font-size:11px;color:var(--muted)}
   .count{font-size:11px;color:var(--muted);margin-left:auto}
@@ -133,6 +137,7 @@
         <div class="row"><input type="text" id="pSearch" placeholder="品名・品番で絞り込み…"><button class="btn" id="pClear">クリア</button></div>
         <div class="row"><label class="cb"><input type="checkbox" id="incEnded"> 終売品を含む</label></div>
         <div class="row"><label class="cb"><input type="checkbox" id="showConsol" checked> 東京支店合計（製品ごと）を表示</label></div>
+        <div class="row"><label class="cb"><input type="checkbox" id="holiday"> 長期連休前チェック（有効在庫−見込で要製造数）</label></div>
         <p class="legend">表の<b>得意先名</b>や<b>製品名</b>をクリックすると、ここの検索条件に反映されます。<br>東京支店合計＝絞り込み担当者の品番のうち<b>他担当者にも実績がある製品</b>を、品番ごとに支店全体で合計します（製造数量の漏れ確認用）。明細の<span class="cmark">★</span>が対象製品です。</p>
       </div>
     </div>
@@ -204,7 +209,8 @@ function prodLabel(hinban, hinmei){
 const fiscalYear = ym => { const y=+ym.slice(0,4), mo=+ym.slice(4); return mo>=4 ? y : y-1; };
 
 // ---- 状態（初期は何も選択していない）----
-const sel = { tanto:new Set(), k:new Set(), months:new Set(), pSearch:"", kSearch:"", incEnded:false, showConsol:true };
+const sel = { tanto:new Set(), k:new Set(), months:new Set(), pSearch:"", kSearch:"", incEnded:false, showConsol:true, holiday:false };
+const STOCK = D.stock || {};
 
 document.getElementById('meta').textContent =
   `更新: ${D.generated} ／ 月レンジ ${D.months[0]}〜${D.months[D.months.length-1]} ／ 全${D.records.length}明細`;
@@ -275,6 +281,7 @@ document.getElementById('pSearch').oninput=e=>{sel.pSearch=e.target.value.toLowe
 document.getElementById('pClear').onclick=()=>{sel.pSearch="";document.getElementById('pSearch').value="";render();};
 document.getElementById('incEnded').onchange=e=>{sel.incEnded=e.target.checked;render();};
 document.getElementById('showConsol').onchange=e=>{sel.showConsol=e.target.checked;render();};
+document.getElementById('holiday').onchange=e=>{sel.holiday=e.target.checked;render();};
 
 // ---- フィルタ ----
 function filtered(){
@@ -371,6 +378,31 @@ function renderConsolBlock(months, items){
   return {html:'<div class="tablewrap"><table>'+head+body+'</table></div>', grand:g};
 }
 
+// ---- 長期連休前チェック（製品ごと・支店全体）----
+// 未来（=実績最終月より後）の選択月の見込出数を合計し、有効在庫を引いて「要製造数」を算出
+function renderHolidayBlock(months, items){
+  const cell=(v,cls='')=>`<td class="num ${v?'':'zero'} ${cls}">${fmt(v)}</td>`;
+  const futM=months.filter(isFuture);     // 差し引く月（現在以降）
+  let head='<thead><tr><th class="lbl colhin">製品（支店全体）</th>';
+  months.forEach(m=>head+=monthTh(m));
+  head+='<th class="tot">見込計</th><th class="stockcol">有効在庫</th><th class="stockcol">要製造数</th></tr></thead>';
+  let rows=items.map(it=>{
+    const demand=futM.reduce((s,mo)=>s+(it.m[mo]||0),0);
+    const stock=STOCK[it.hinban]||0;
+    return {it, demand, stock, need:Math.max(0, demand-stock)};
+  }).filter(x=> x.demand>0 || x.stock>0 || months.some(mo=>x.it.m[mo]));
+  rows.sort((a,b)=> b.need-a.need || b.demand-a.demand);
+  let body='<tbody>';
+  rows.forEach(({it,demand,stock,need})=>{
+    body+='<tr class="item"><td class="colhin">'+prodLabel(it.hinban,it.hinmei)+(it.ended?'<span class="badge">終売</span>':'')+'</td>';
+    months.forEach(mo=>body+=cell(it.m[mo],fcls(mo)));
+    body+=cell(demand,'tot')+'<td class="num stock">'+fmt(stock)+'</td><td class="num need'+(need>0?' short':'')+'">'+fmt(need)+'</td></tr>';
+  });
+  if(!rows.length) body+='<tr><td class="colhin">対象製品なし</td></tr>';
+  body+='</tbody>';
+  return {html:'<div class="tablewrap"><table>'+head+body+'</table></div>', futCount:futM.length, rowCount:rows.length};
+}
+
 // ---- 描画 ----
 const host=document.getElementById('tblHost');
 function render(){
@@ -392,8 +424,22 @@ function render(){
   const qhin=qualifySet(months,recs);
   let htmlAll=''; let total=0;
 
+  // 長期連休前チェック（製品ごと・支店全体／未来選択月の見込 − 有効在庫 ＝ 要製造数）
+  if(sel.holiday){
+    const hin=new Set(recs.map(r=>r.hinban));
+    const items=consolidateByHinban(hin, months);
+    const {html,futCount,rowCount}=renderHolidayBlock(months, items);
+    const note = futCount
+      ? '差し引く月＝<b>'+months.filter(isFuture).map(ymLabel).join('・')+'</b>（実績最終月 '+ymLabel(LAST_ACTUAL)+' より後＝見込）。要製造数＝見込計−有効在庫。'
+      : '<span style="color:#c00">未来月（'+ymLabel(LAST_ACTUAL)+'より後）が選択されていません。差し引く月が無いため要製造数は0です。対象月に先の月を追加してください。</span>';
+    htmlAll+='<div style="margin:6px 12px 0;font-size:12px;color:var(--accent);font-weight:700">■ 長期連休前 製造必要数チェック（製品ごと・支店全体）</div>'+
+      '<div style="margin:2px 12px 6px;font-size:11px;color:var(--muted)">'+note+'</div>'+
+      html+
+      '<div style="margin:8px 12px 10px;border-top:2px dashed var(--line)"></div>'+
+      '<div style="margin:6px 12px 0;font-size:12px;color:var(--accent);font-weight:700">■ 絞り込み明細（担当者＞得意先＞製品）</div>';
+  }
   // 東京支店合計セクション（製品ごと・他担当者にも実績がある品番のみ）
-  if(sel.showConsol){
+  else if(sel.showConsol){
     if(qhin.size){
       const items=consolidateByHinban(qhin, months);
       let consol='';
