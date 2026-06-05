@@ -118,8 +118,8 @@
     table{font-size:12px}
     th,td{padding:6px 5px}
     /* 製品名・得意先名は1行表示（長い場合は…で省略） */
-    /* 製品名は省略せず1行で全体表示（列は内容に合わせて広がる・表は横スクロール） */
-    .colhin{min-width:160px;max-width:none;white-space:nowrap;overflow:visible;text-overflow:clip}
+    /* スマホは製品名列を狭く固定（…省略）して数値を見やすく・横スクロール可能に */
+    .colhin{min-width:104px;max-width:128px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     thead th{font-size:11px}
     .legend{font-size:12px}
     .count{font-size:12px}
