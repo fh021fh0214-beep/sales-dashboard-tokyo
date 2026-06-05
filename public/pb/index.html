@@ -42,7 +42,7 @@
   .scrolllist label:hover{background:#f0f4f2}
   .yearblock{margin:0 12px 16px}
   .yeartitle{font-size:13px;font-weight:700;color:var(--accent);margin:10px 0 4px;padding-left:2px;border-left:4px solid var(--accent2);padding:2px 0 2px 8px}
-  .tablewrap{overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+  .tablewrap{overflow:auto;max-height:max(360px, calc(100vh - 96px));border:1px solid var(--line);border-radius:8px;background:#fff}
   table{border-collapse:separate;border-spacing:0;width:100%;font-size:12px}
   th,td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
   thead th{position:sticky;top:0;background:var(--head);border-bottom:2px solid var(--headline);z-index:3;text-align:right;font-weight:700}
@@ -402,7 +402,8 @@ function renderConsolBlock(months, items){
   let body='<tbody>'; const g={m:{},sum:0};
   items.map(it=>({it,rs:months.reduce((s,mo)=>s+(it.m[mo]||0),0)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs).forEach(({it,rs})=>{
     months.forEach(mo=>{const v=it.m[mo]; if(v) g.m[mo]=(g.m[mo]||0)+v;}); g.sum+=rs;
-    body+='<tr class="item"><td class="colhin">'+prodLabel(it.hinban,it.hinmei)+(it.ended?'<span class="badge">終売</span>':'')+'</td>';
+    const st=rowStatus(it.hinban,0);   // 製品別は需要なし→青(新規)/黄(直近3か月0)のみ
+    body+='<tr class="item'+(st?' '+st+'row':'')+'"><td class="colhin">'+prodLabel(it.hinban,it.hinmei)+(it.ended?'<span class="badge">終売</span>':'')+(st==='new'?'<span class="ntag">新規</span>':'')+(st==='warn'?'<span class="wtag">直近3ヶ月0</span>':'')+'</td>';
     months.forEach(mo=>body+=cell(it.m[mo],fcls(mo))); body+=cell(rs,'tot')+'</tr>';
   });
   body+='<tr class="tanto"><td class="colhin">合算 合計</td>';
@@ -565,7 +566,7 @@ function checklistSheet(ed){
       rows.push([['□',0],[c.tanto.replace(/　/g,' '),8],[c.kname,8],[c.kcode,8],[r.hinban,8],[mk+r.hinmei+(r.ended?' [終売]':''),8],[tot,9]]);
     });
   });
-  return {name:'チェックリスト', rows, cols:[4,14,30,16,12,42,12]};
+  return {name:'チェックリスト', rows, cols:[4,14,30,16,12,42,12], freeze:{r:4, c:1}};
 }
 function customerSheet(c,ed,used){
   const M=ed.months;
@@ -576,33 +577,37 @@ function customerSheet(c,ed,used){
   const hdr=[['品番',2],['製品',2]]; M.forEach(mo=>hdr.push([ymLabel(mo)+(isFuture(mo)?'(前年)':''), isFuture(mo)?14:3])); hdr.push(['合計',3]); rows.push(hdr);
   const tot={}; let tsum=0;
   c.items.map(r=>({r,rs:rowSum(r,M)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs).forEach(({r,rs})=>{
+    const st=rowStatus(r.hinban,0); const [L,N]=stStyles(st);
     const mk=ed.qualify.has(r.hinban)?'★ ':'';
-    const ir=[[r.hinban,8],[mk+r.hinmei+(r.ended?' [終売]':''),8]];
-    M.forEach(mo=>{const v=val(r,mo); ir.push([v, isFuture(mo)?15:9]); if(v){tot[mo]=(tot[mo]||0)+v; tsum+=v;}});
-    ir.push([rs,9]); rows.push(ir);
+    const ir=[[r.hinban,L],[mk+r.hinmei+(r.ended?' [終売]':''),L]];
+    M.forEach(mo=>{const v=val(r,mo); ir.push([v, st?N:(isFuture(mo)?15:9)]); if(v){tot[mo]=(tot[mo]||0)+v; tsum+=v;}});
+    ir.push([rs,N]); rows.push(ir);
   });
   const gr=[['得意先 合計',12],['',12]]; M.forEach(mo=>gr.push([tot[mo]||0,13])); gr.push([tsum,13]); rows.push(gr);
   const cols=[12,46]; for(let i=0;i<M.length+1;i++) cols.push(10.5);
-  return {name:sheetName(c.kname,used), rows, cols};
+  return {name:sheetName(c.kname,used), rows, cols, freeze:{r:4, c:2}};
 }
-function consolSheet(ed){
+// 製品別シート（品番ごと・支店全体・横並び）。行を青(新規)/黄(直近3か月0)で色分け、見出し固定。
+function productSheet(ed, hinSet, opts){
   const M=ed.months;
-  const items=consolidateByHinban(ed.qualify, M);
+  const items=consolidateByHinban(hinSet, M);
   const rows=[];
-  rows.push([['東京支店合計（製品ごと・他担当者にも実績がある製品を支店全体で合計）',10]]);
-  rows.push([['対象期間: '+ymLabel(M[0])+'〜'+ymLabel(M[M.length-1])+'　／　更新: '+D.generated,0]]);
-  if(!items.length) rows.push([['対象製品はありません（絞り込み担当者以外で同一品番の実績なし、または担当者を全員選択中）。',0]]);
+  rows.push([[opts.title,10]]);
+  rows.push([['対象期間: '+ymLabel(M[0])+'〜'+ymLabel(M[M.length-1])+'　／　更新: '+D.generated+'　／　青=新規(前年なし直近あり)・黄=前年あり直近3か月0',0]]);
+  if(!items.length && opts.emptyNote) rows.push([[opts.emptyNote,0]]);
   rows.push([]);
+  const hr=rows.length+1;
   const hdr=[['品番',2],['製品',2]]; M.forEach(mo=>hdr.push([ymLabel(mo)+(isFuture(mo)?'(前年)':''), isFuture(mo)?14:3])); hdr.push(['合計',3]); rows.push(hdr);
   const tot={}; let tsum=0;
   items.map(it=>({it,rs:M.reduce((s,mo)=>s+(it.m[mo]||0),0)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs).forEach(({it,rs})=>{
-    const ir=[[it.hinban,8],[it.hinmei+(it.ended?' [終売]':''),8]];
-    M.forEach(mo=>{const v=it.m[mo]||0; ir.push([v, isFuture(mo)?15:9]); if(v){tot[mo]=(tot[mo]||0)+v; tsum+=v;}});
-    ir.push([rs,9]); rows.push(ir);
+    const st=rowStatus(it.hinban,0); const [L,N]=stStyles(st);
+    const ir=[[it.hinban,L],[it.hinmei+(it.ended?' [終売]':''),L]];
+    M.forEach(mo=>{const v=it.m[mo]||0; ir.push([v, st?N:(isFuture(mo)?15:9)]); if(v){tot[mo]=(tot[mo]||0)+v; tsum+=v;}});
+    ir.push([rs,N]); rows.push(ir);
   });
   const gr=[['合計',12],['',12]]; M.forEach(mo=>gr.push([tot[mo]||0,13])); gr.push([tsum,13]); rows.push(gr);
   const cols=[12,46]; for(let i=0;i<M.length+1;i++) cols.push(10.5);
-  return {name:'東京支店合計', rows, cols};
+  return {name:opts.name, rows, cols, freeze:{r:hr, c:2}};
 }
 
 // 長期連休前：製品別 製造必要数シート（全選択月を横並び・年度分割なし）
@@ -623,13 +628,15 @@ function holidaySheet(ed, showTanto){
   arr.sort((a,b)=> statusRank(a.it.hinban,a.need)-statusRank(b.it.hinban,b.need) || b.need-a.need || b.demand-a.demand);
   arr.forEach(({it,demand,stock,need})=>{
     const st=rowStatus(it.hinban, need);
-    const ir=[[it.hinban,8],[it.hinmei+(it.ended?' [終売]':''), st==='warn'?17:st==='new'?18:8]];
-    if(showTanto) ir.push([(PRODTANTO[it.hinban]||'－').replace(/　/g,' '),8]);
-    ed.months.forEach(mo=>ir.push([it.m[mo]||0, isFuture(mo)?15:9]));
-    ir.push([demand,9],[stock,9],[need, need>0?16:9]); rows.push(ir);
+    const [L,N]=stStyles(st);                       // 行全体を色分け
+    const fN=mo=> st? N : (isFuture(mo)?15:9);       // 既定行のみ未来月は青
+    const ir=[[it.hinban,L],[it.hinmei+(it.ended?' [終売]':''),L]];
+    if(showTanto) ir.push([(PRODTANTO[it.hinban]||'－').replace(/　/g,' '),L]);
+    ed.months.forEach(mo=>ir.push([it.m[mo]||0, fN(mo)]));
+    ir.push([demand,N],[stock,N],[need, need>0?16:N]); rows.push(ir);
   });
   const cols=[12,46]; if(showTanto) cols.push(16); for(let i=0;i<ed.months.length+3;i++) cols.push(10.5);
-  return {name:'製造必要数(製品別)', rows, cols};
+  return {name:'製造必要数(製品別)', rows, cols, freeze:{r:3, c:showTanto?3:2}};
 }
 
 // ---- 依存ライブラリ無しの最小XLSXライター（store方式ZIP）----
@@ -656,7 +663,7 @@ function makeZip(files){
 const STYLES_XML='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
 '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
 '<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0"/></numFmts>'+
-'<fonts count="6">'+
+'<fonts count="7">'+
 '<font><sz val="11"/><name val="Yu Gothic"/></font>'+
 '<font><b/><sz val="11"/><name val="Yu Gothic"/></font>'+
 '<font><b/><sz val="14"/><color rgb="FF0B6E4F"/><name val="Yu Gothic"/></font>'+
@@ -677,7 +684,7 @@ const STYLES_XML='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
 '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+
 '<border><left/><right/><top/><bottom style="thin"><color rgb="FFE7D96A"/></bottom><diagonal/></border></borders>'+
 '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
-'<cellXfs count="19">'+
+'<cellXfs count="23">'+
 '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+
 '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
 '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left"/></xf>'+
@@ -697,7 +704,13 @@ const STYLES_XML='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
 '<xf numFmtId="164" fontId="6" fillId="7" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
 '<xf numFmtId="0" fontId="0" fillId="8" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="left"/></xf>'+
 '<xf numFmtId="0" fontId="0" fillId="6" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="left"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="7" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="left"/></xf>'+
+'<xf numFmtId="164" fontId="0" fillId="6" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
+'<xf numFmtId="164" fontId="0" fillId="8" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
+'<xf numFmtId="164" fontId="0" fillId="7" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
 '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+// 行ステータス→[ラベルstyle, 数値style]（''=既定 / new=青 / warn=黄 / short=赤）
+function stStyles(s){ return s==='short'?[19,22] : s==='new'?[18,20] : s==='warn'?[17,21] : [8,9]; }
 
 function sheetXml(sheet){
   const w=sheet.cols||[];
@@ -714,9 +727,15 @@ function sheetXml(sheet){
     });
     sd+='<row r="'+r+'">'+cc+'</row>';
   });
+  // 見出し行・ラベル列の固定（freeze:{r:固定する行数, c:固定する列数}）
+  let views='';
+  if(sheet.freeze){
+    const fr=sheet.freeze.r||0, fc=sheet.freeze.c||0, tl=colLetter(fc)+(fr+1);
+    views='<sheetViews><sheetView workbookViewId="0"><pane'+(fc?' xSplit="'+fc+'"':'')+(fr?' ySplit="'+fr+'"':'')+' topLeftCell="'+tl+'" activePane="bottomRight" state="frozen"/><selection pane="bottomRight" activeCell="'+tl+'" sqref="'+tl+'"/></sheetView></sheetViews>';
+  }
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
-    cols+'<sheetData>'+sd+'</sheetData></worksheet>';
+    views+cols+'<sheetData>'+sd+'</sheetData></worksheet>';
 }
 
 function buildXlsxFiles(sheets){
@@ -744,13 +763,16 @@ function downloadXlsx(){
   if(sel.holiday){
     // 長期連休前ON：製造必要数シートのみ（チェックリスト・明細なし／全員時は担当者列付き）
     sheets=[ holidaySheet(ed, isAllExport) ];
+  } else if(isAllExport){
+    // 全員：製品別（支店全体）シート（色分け・見出し固定）
+    const allHin=new Set(); ed.custs.forEach(c=>c.items.forEach(r=>allHin.add(r.hinban)));
+    sheets=[ productSheet(ed, allHin, {title:'製品別（支店全体）', name:'製品別'}) ];
   } else {
-    sheets=[ checklistSheet(ed) ];
-    if(!isAllExport){
-      const custsWithData=ed.custs.filter(c=>c.items.some(r=>ed.months.some(m=>val(r,m))));
-      if(custsWithData.length>80 && !confirm(custsWithData.length+'件の得意先を個別シートに出力します（時間がかかる場合があります）。よろしいですか？')) return;
-      sheets.push(consolSheet(ed), ...custsWithData.map(c=>customerSheet(c,ed,used)));
-    }
+    sheets=[ checklistSheet(ed),
+             productSheet(ed, ed.qualify, {title:'東京支店合計（製品ごと・他担当者にも実績がある製品を支店全体で合計）', name:'東京支店合計', emptyNote:'対象製品はありません（絞り込み担当者以外で同一品番の実績なし）。'}) ];
+    const custsWithData=ed.custs.filter(c=>c.items.some(r=>ed.months.some(m=>val(r,m))));
+    if(custsWithData.length>80 && !confirm(custsWithData.length+'件の得意先を個別シートに出力します（時間がかかる場合があります）。よろしいですか？')) return;
+    sheets.push(...custsWithData.map(c=>customerSheet(c,ed,used)));
   }
   const a=document.createElement('a'); a.href=URL.createObjectURL(makeZip(buildXlsxFiles(sheets)));
   a.download='PB実績_'+new Date().toISOString().slice(0,10)+'.xlsx'; a.click();
