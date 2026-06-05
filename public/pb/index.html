@@ -79,6 +79,30 @@
   tr.item.newrow td.colhin{background:#e6eeff}
   .wtag{display:inline-block;font-size:9px;background:#caa400;color:#fff;border-radius:3px;padding:0 4px;margin-left:5px;font-weight:700;vertical-align:middle}
   .ntag{display:inline-block;font-size:9px;background:#1c4ea8;color:#fff;border-radius:3px;padding:0 4px;margin-left:5px;font-weight:700;vertical-align:middle}
+  td.num.drill{cursor:pointer}
+  td.num.drill:hover{background:#fffbdd;text-decoration:underline}
+  #detModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;align-items:flex-start;justify-content:center;padding:40px 12px}
+  #detModal.show{display:flex}
+  #detModal .dbox{background:#fff;border-radius:10px;width:min(720px,100%);max-height:calc(100vh - 80px);display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.3)}
+  #detModal header{display:flex;align-items:center;gap:10px;padding:10px 14px;background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;border-radius:10px 10px 0 0}
+  #detModal header .ttl{font-weight:700;font-size:14px;flex:1;line-height:1.3}
+  #detModal header .sub{font-size:11px;opacity:.9}
+  #detModal .dx{background:transparent;border:0;color:#fff;font-size:22px;cursor:pointer;line-height:1;padding:0 4px}
+  #detModal .body{overflow:auto;padding:8px 14px 14px}
+  #detModal table{width:100%;border-collapse:collapse;font-size:12px}
+  #detModal th,#detModal td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  #detModal thead th{position:sticky;top:0;background:var(--head);border-bottom:2px solid var(--headline);text-align:left}
+  #detModal td.num,#detModal th.num{text-align:right;font-variant-numeric:tabular-nums}
+  #detModal tr.tot td{font-weight:700;background:#f7faf8;border-top:2px solid var(--accent2)}
+  #detModal .empty{padding:30px;text-align:center;color:var(--muted)}
+  #detModal .ftag{display:inline-block;font-size:10px;background:#1c4ea8;color:#fff;border-radius:3px;padding:0 5px;margin-left:6px;font-weight:700}
+  @media(max-width:700px){
+    #detModal{padding:10px}
+    #detModal .dbox{max-height:calc(100vh - 20px)}
+    #detModal header .ttl{font-size:13px}
+    #detModal table{font-size:13px}
+    #detModal th,#detModal td{padding:7px 6px}
+  }
   .shorttag{display:inline-block;font-size:11px;background:#ffd6d6;color:#c00;border-radius:3px;padding:0 5px;font-weight:700}
   .empty{padding:46px;text-align:center;color:var(--muted);font-size:13px}
   .legend{font-size:11px;color:var(--muted)}
@@ -190,6 +214,16 @@
   <div id="gateErr" style="color:#c00;font-size:12px;margin-top:8px;min-height:16px"></div>
 </div></div>
 
+<div id="detModal" role="dialog" aria-modal="true">
+  <div class="dbox">
+    <header>
+      <div class="ttl"><span id="detTitle">明細</span><div class="sub" id="detSub"></div></div>
+      <button class="dx" id="detClose" title="閉じる">×</button>
+    </header>
+    <div class="body" id="detBody"></div>
+  </div>
+</div>
+
 <script src="data.js" onerror="window.__noplain=1"></script>
 <script src="data.enc.js" onerror="window.__noenc=1"></script>
 <script>
@@ -210,6 +244,14 @@ const ymHead = ym => isFuture(ym)
   : '<span class="ymfull">'+ymLabel(ym)+'</span><span class="ymshort">'+ymShort(ym)+'</span>';
 const monthTh = m => '<th'+(isFuture(m)?' class="fut"':'')+'>'+ymHead(m)+'</th>';
 const fcls = mo => isFuture(mo)?'fut':'';   // 未来月セル用クラス
+const actualYm = mo => isFuture(mo) ? prevYM(mo) : mo;   // ドリルダウン用の実データ月
+const DETAILS = D.details || {};
+// 数値セル（クリックでドリルダウン）。h=品番, m=実データ年月 を渡すと .drill 化
+const cellD=(v,cls,h,m,clickedM)=>{
+  const drill = h && v && (DETAILS[h]||{})[m];
+  const cm = clickedM || m;
+  return `<td class="num ${v?'':'zero'} ${cls||''}${drill?' drill':''}"${drill?` data-h="${h}" data-m="${m}" data-cm="${cm}"`:''}>${fmt(v)}</td>`;
+};
 // 製品ラベル: 品番／製品コード（ＢＥ-９２９等）／製品名 をspanに分割（スマホでは前2つを非表示）
 const _codeRe=/^([０-９Ａ-Ｚ][０-９Ａ-Ｚ]*[－ー\-][０-９][０-９Ａ-Ｚ]*)([\s　]*)([\s\S]*)$/;
 function prodLabel(hinban, hinmei){
@@ -363,7 +405,7 @@ function renderBlock(months, tree, qhin){
       months.forEach(mo=>body+=cell(km[mo],fcls(mo))); body+=cell(ksum,'tot')+'</tr>';
       K.items.map(r=>({r,rs:rowSum(r,months)})).filter(x=>x.rs>0).sort((a,b)=>b.rs-a.rs).forEach(({r,rs})=>{
         body+='<tr class="item"><td class="colhin"><span class="indent">　・</span><span class="clk" data-pfilter="'+r.hinmei.replace(/"/g,'&quot;')+'">'+prodLabel(r.hinban,r.hinmei)+'</span>'+(qhin&&qhin.has(r.hinban)?'<span class="cmark" title="東京支店合計の対象（他担当者にも実績あり）">★</span>':'')+(r.ended?'<span class="badge">終売</span>':'')+'</td>';
-        months.forEach(mo=>body+=cell(val(r,mo),fcls(mo))); body+=cell(rs,'tot')+'</tr>';
+        months.forEach(mo=>body+=cellD(val(r,mo),fcls(mo),r.hinban,actualYm(mo),mo)); body+=cell(rs,'tot')+'</tr>';
       });
     });
   });
@@ -404,7 +446,7 @@ function renderConsolBlock(months, items){
     months.forEach(mo=>{const v=it.m[mo]; if(v) g.m[mo]=(g.m[mo]||0)+v;}); g.sum+=rs;
     const st=rowStatus(it.hinban,0);   // 製品別は需要なし→青(新規)/黄(直近3か月0)のみ
     body+='<tr class="item'+(st?' '+st+'row':'')+'"><td class="colhin">'+prodLabel(it.hinban,it.hinmei)+(it.ended?'<span class="badge">終売</span>':'')+(st==='new'?'<span class="ntag">新規</span>':'')+(st==='warn'?'<span class="wtag">直近3ヶ月0</span>':'')+'</td>';
-    months.forEach(mo=>body+=cell(it.m[mo],fcls(mo))); body+=cell(rs,'tot')+'</tr>';
+    months.forEach(mo=>body+=cellD(it.m[mo],fcls(mo),it.hinban,actualYm(mo),mo)); body+=cell(rs,'tot')+'</tr>';
   });
   body+='<tr class="tanto"><td class="colhin">合算 合計</td>';
   months.forEach(mo=>body+=cell(g.m[mo],fcls(mo))); body+=cell(g.sum,'tot')+'</tr></tbody>';
@@ -431,7 +473,7 @@ function renderHolidayBlock(months, items, showTanto){
     const st=rowStatus(it.hinban, need);
     body+='<tr class="item'+(st?' '+st+'row':'')+'"><td class="colhin">'+prodLabel(it.hinban,it.hinmei)+(it.ended?'<span class="badge">終売</span>':'')+(st==='new'?'<span class="ntag">新規</span>':'')+(st==='warn'?'<span class="wtag">直近3ヶ月0</span>':'')+'</td>';
     if(showTanto) body+='<td class="tantocol">'+((PRODTANTO[it.hinban]||'－').replace(/　/g,' '))+'</td>';
-    months.forEach(mo=>body+=cell(it.m[mo],fcls(mo)));
+    months.forEach(mo=>body+=cellD(it.m[mo],fcls(mo),it.hinban,actualYm(mo),mo));
     body+=cell(demand,'tot')+'<td class="num stock">'+fmt(stock)+'</td><td class="num need'+(need>0?' short':'')+'">'+fmt(need)+'</td></tr>';
   });
   if(!rows.length) body+='<tr><td class="colhin">対象製品なし</td></tr>';
@@ -778,8 +820,36 @@ function downloadXlsx(){
   a.download='PB実績_'+new Date().toISOString().slice(0,10)+'.xlsx'; a.click();
 }
 
-// 表クリック → 検索条件へ反映
+// ---- ドリルダウン（実績数字を押すと前年/今年実績の明細を表示）----
+function showDetails(hinban, ym, clickedYm){
+  const det = (DETAILS[hinban]||{})[ym] || [];
+  const hinmei = (D.records.find(r=>r.hinban===hinban)||{}).hinmei || '';
+  const sum = det.reduce((s,r)=>s+(r.c||0),0);
+  const clicked = clickedYm || ym;
+  const wasFuture = clicked !== ym;
+  let html;
+  if(!det.length){
+    html='<div class="empty">この月の明細はありません（実績データに該当行が無いか、未集計の月です）。</div>';
+  } else {
+    let body=''; const sorted=det.slice().sort((a,b)=>(a.d||'').localeCompare(b.d||''));
+    sorted.forEach(r=>{ body+='<tr><td>'+(r.d||'')+'</td><td>'+(r.k||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</td><td>'+(r.t||'').replace(/　/g,' ').replace(/</g,'&lt;')+'</td><td class="num">'+fmt(r.c)+'</td></tr>'; });
+    html='<table><thead><tr><th>売掛日</th><th>請求先</th><th>担当者</th><th class="num">ケース数</th></tr></thead><tbody>'+body+'</tbody>'+
+      '<tfoot><tr class="tot"><td colspan="3">合計（'+sorted.length+'件）</td><td class="num">'+fmt(sum)+'</td></tr></tfoot></table>';
+  }
+  document.getElementById('detTitle').innerHTML = hinban+' '+hinmei+(wasFuture?'<span class="ftag">前年同月参照</span>':'');
+  document.getElementById('detSub').textContent = ymLabel(ym)+(wasFuture?'（'+ymLabel(clicked)+' の見込として表示）':'');
+  document.getElementById('detBody').innerHTML = html;
+  document.getElementById('detModal').classList.add('show');
+}
+function closeDetails(){ document.getElementById('detModal').classList.remove('show'); }
+document.getElementById('detClose').onclick = closeDetails;
+document.getElementById('detModal').addEventListener('click', e=>{ if(e.target.id==='detModal') closeDetails(); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeDetails(); });
+
+// 表クリック → ドリルダウン優先 → 得意先/製品フィルタ
 host.addEventListener('click', e=>{
+  const dEl = e.target.closest('td.drill[data-h]');
+  if(dEl){ showDetails(dEl.dataset.h, dEl.dataset.m, dEl.dataset.cm); return; }
   const kEl=e.target.closest('[data-kfilter]');
   if(kEl){ sel.k=new Set([kEl.dataset.kfilter]); sel.kSearch=kEl.dataset.kname; document.getElementById('kSearch').value=kEl.dataset.kname; buildKList(); render(); return; }
   const pEl=e.target.closest('[data-pfilter]');
