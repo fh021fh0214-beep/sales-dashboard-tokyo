@@ -172,7 +172,6 @@
         <h2>製品</h2>
         <div class="row"><input type="text" id="pSearch" placeholder="品名・品番で絞り込み…"><button class="btn" id="pClear">クリア</button></div>
         <div class="row"><label class="cb"><input type="checkbox" id="incEnded"> 終売品を含む</label></div>
-        <div class="row"><label class="cb"><input type="checkbox" id="showConsol" checked> 東京支店合計（製品ごと）を表示</label></div>
         <div class="row"><label class="cb"><input type="checkbox" id="holiday"> 長期連休前チェック（有効在庫−見込で要製造数）</label></div>
         <p class="legend">表の<b>得意先名</b>や<b>製品名</b>をクリックすると、ここの検索条件に反映されます。<br>東京支店合計＝絞り込み担当者の品番のうち<b>他担当者にも実績がある製品</b>を、品番ごとに支店全体で合計します（製造数量の漏れ確認用）。明細の<span class="cmark">★</span>が対象製品です。</p>
       </div>
@@ -282,7 +281,7 @@ const STATUS_RANK = {short:0, 'new':1, warn:2};
 const statusRank = (hinban, need) => { const s=rowStatus(hinban,need); return (s in STATUS_RANK)?STATUS_RANK[s]:3; };
 
 // ---- 状態（初期は何も選択していない）----
-const sel = { tanto:new Set(), k:new Set(), months:new Set(), pSearch:"", kSearch:"", incEnded:false, showConsol:true, holiday:false };
+const sel = { tanto:new Set(), k:new Set(), months:new Set(), pSearch:"", kSearch:"", incEnded:false, holiday:false };
 const STOCK = D.stock || {};
 const PRODTANTO = D.prodTanto || {};   // 品番→製造担当（標準ロットの正）
 
@@ -354,7 +353,6 @@ document.getElementById('kSearch').oninput=e=>{sel.kSearch=e.target.value;buildK
 document.getElementById('pSearch').oninput=e=>{sel.pSearch=e.target.value.toLowerCase();render();};
 document.getElementById('pClear').onclick=()=>{sel.pSearch="";document.getElementById('pSearch').value="";render();};
 document.getElementById('incEnded').onchange=e=>{sel.incEnded=e.target.checked;render();};
-document.getElementById('showConsol').onchange=e=>{sel.showConsol=e.target.checked;render();};
 document.getElementById('holiday').onchange=e=>{sel.holiday=e.target.checked;render();};
 
 // ---- フィルタ ----
@@ -555,18 +553,14 @@ function render(){
     return;
   }
 
-  // 通常：東京支店合計（任意）＋ 絞り込み明細（担当者＞得意先＞製品）。いずれも横並び1表。
-  if(sel.showConsol){
-    if(qhin.size){
-      const items=consolidateByHinban(qhin, months);
-      const {html,grand}=renderConsolBlock(months, items);
-      if(grand.sum>0){
-        htmlAll+= H('■ 東京支店合計（絞り込み担当者の品番のうち、他担当者にも実績がある製品を品番ごとに支店全体で合計）')+
-          '<div class="yearblock">'+html+'</div>'+DIV+
-          H('■ 絞り込み明細（担当者＞得意先＞製品）　<span class="cmark">★</span>=東京支店合計の対象');
-      }
-    } else {
-      htmlAll+='<div style="margin:8px 12px;color:var(--muted);font-size:12px">東京支店合計の対象製品はありません（絞り込み担当者以外で同一品番の実績なし）。</div>';
+  // 通常：東京支店合計（他担当者にも実績がある品番のみ）＋ 絞り込み明細
+  if(qhin.size){
+    const items=consolidateByHinban(qhin, months);
+    const {html,grand}=renderConsolBlock(months, items);
+    if(grand.sum>0){
+      htmlAll+= H('■ 東京支店合計（絞り込み担当者の品番のうち、他担当者にも実績がある製品を品番ごとに支店全体で合計）')+
+        '<div class="yearblock">'+html+'</div>'+DIV+
+        H('■ 絞り込み明細（担当者＞得意先＞製品）　<span class="cmark">★</span>=東京支店合計の対象');
     }
   }
 
