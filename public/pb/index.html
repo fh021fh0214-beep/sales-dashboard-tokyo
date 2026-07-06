@@ -173,7 +173,7 @@
         <div class="row"><input type="text" id="pSearch" placeholder="品名・品番で絞り込み…"><button class="btn" id="pClear">クリア</button></div>
         <div class="row"><label class="cb"><input type="checkbox" id="incEnded"> 終売品を含む</label></div>
         <div class="row"><label class="cb"><input type="checkbox" id="holiday"> 長期連休前チェック（有効在庫−見込で要製造数）</label></div>
-        <p class="legend">表の<b>得意先名</b>や<b>製品名</b>をクリックすると、ここの検索条件に反映されます。<br>東京支店合計＝絞り込み担当者の品番のうち<b>他担当者にも実績がある製品</b>を、品番ごとに支店全体で合計します（製造数量の漏れ確認用）。明細の<span class="cmark">★</span>が対象製品です。</p>
+        <p class="legend">表の<b>得意先名</b>や<b>製品名</b>をクリックすると、ここの検索条件に反映されます。</p>
       </div>
     </div>
   </div>
@@ -553,17 +553,7 @@ function render(){
     return;
   }
 
-  // 通常：東京支店合計（他担当者にも実績がある品番のみ）＋ 絞り込み明細
-  if(qhin.size){
-    const items=consolidateByHinban(qhin, months);
-    const {html,grand}=renderConsolBlock(months, items);
-    if(grand.sum>0){
-      htmlAll+= H('■ 東京支店合計（絞り込み担当者の品番のうち、他担当者にも実績がある製品を品番ごとに支店全体で合計）')+
-        '<div class="yearblock">'+html+'</div>'+DIV+
-        H('■ 絞り込み明細（担当者＞得意先＞製品）　<span class="cmark">★</span>=東京支店合計の対象');
-    }
-  }
-
+  // 絞り込み明細（担当者＞得意先＞製品）
   const {html,grand}=renderBlock(months, tree, qhin);
   if(grand.sum>0) htmlAll += '<div class="yearblock">'+html+'</div>';
   else htmlAll += '<div class="empty">選択した期間に実績のある製品はありません。対象月を変更してください。</div>';
@@ -852,6 +842,13 @@ host.addEventListener('click', e=>{
 
 document.getElementById('exportXlsx').onclick=downloadXlsx;
 
+// 初期状態＝全員＋全期間を選択
+(function initDefaults(){
+  sel.tanto=new Set(D.tantos);
+  tantoChips.querySelectorAll('.chip').forEach(c=>c.classList.add('on'));
+  sel.months=new Set(D.months);
+  monthChips.querySelectorAll('.chip').forEach(c=>c.classList.add('on'));
+})();
 buildKList();
 render();
 }
