@@ -284,6 +284,7 @@ const statusRank = (hinban, need) => { const s=rowStatus(hinban,need); return (s
 const sel = { tanto:new Set(), k:new Set(), months:new Set(), pSearch:"", kSearch:"", incEnded:false, holiday:false };
 const STOCK = D.stock || {};
 const PRODTANTO = D.prodTanto || {};   // 品番→製造担当（標準ロットの正）
+const PRODLOT   = D.prodLot   || {};   // 品番→標準ロット(cs)（未記載は無し）
 
 document.getElementById('meta').textContent =
   `更新: ${D.generated} ／ 月レンジ ${D.months[0]}〜${D.months[D.months.length-1]} ／ 全${D.records.length}明細`;
@@ -644,11 +645,16 @@ function holidaySheet(ed, showTanto){
   const futM=ed.months.filter(isFuture);
   const rows=[];
   rows.push([['長期連休前 製造必要数（製品ごと・支店全体）　※不足=赤/新規(前年なし直近あり)=青/前年あり直近3か月0=黄',10]]);
-  rows.push([['対象期間: '+ymLabel(ed.months[0])+'〜'+ymLabel(ed.months[ed.months.length-1])+'　／　差引月(見込): '+(futM.map(ymLabel).join('・')||'なし')+'　／　更新: '+D.generated,0]]);
+  rows.push([['対象期間: '+ymLabel(ed.months[0])+'〜'+ymLabel(ed.months[ed.months.length-1])+'　／　差引月(見込): '+(futM.map(ymLabel).join('・')||'なし')+'　／　更新: '+D.generated+'　／　製造ロット・依頼ロット数・差引在庫を編集すると初期値との差が薄緑で表示されます。リセット：右の非表示列(初期値)を再表示して編集列をコピー貼付。',0]]);
   const hdr=[['品番',2],['製品',2]];
   if(showTanto) hdr.push(['担当者',2]);
   ed.months.forEach(mo=>hdr.push([ymLabel(mo)+(isFuture(mo)?'(前年)':''), isFuture(mo)?14:3]));
-  hdr.push(['見込計',3],['有効在庫',3],['要製造数',3]); rows.push(hdr);
+  hdr.push(['見込計',3],['有効在庫',3],['要製造数',3]);
+  hdr.push(['製造ロット',3],['依頼ロット数',3],['差引在庫',3]);
+  // 非表示 初期値列
+  hdr.push(['製造ロット(初期)',3],['依頼ロット数(初期)',3],['差引在庫(初期)',3]);
+  rows.push(hdr);
+
   const arr=items.map(it=>{ const demand=futM.reduce((s,mo)=>s+(it.m[mo]||0),0); const stock=STOCK[it.hinban]||0; return {it,demand,stock,need:Math.max(0,demand-stock)};})
     .filter(x=> x.demand>0||x.stock>0||ed.months.some(mo=>x.it.m[mo]));
   arr.sort((a,b)=> statusRank(a.it.hinban,a.need)-statusRank(b.it.hinban,b.need) || b.need-a.need || b.demand-a.demand);
@@ -659,10 +665,45 @@ function holidaySheet(ed, showTanto){
     const ir=[[it.hinban,L],[it.hinmei+(it.ended?' [終売]':''),L]];
     if(showTanto) ir.push([(PRODTANTO[it.hinban]||'－').replace(/　/g,' '),L]);
     ed.months.forEach(mo=>ir.push([it.m[mo]||0, fN(mo)]));
-    ir.push([demand,N],[stock,N],[need, need>0?16:N]); rows.push(ir);
+    ir.push([demand,N],[stock,N],[need, need>0?16:N]);
+    // 編集列（初期値）
+    const lot = PRODLOT[it.hinban];              // 未記載は空欄
+    const req = 0;                                 // 依頼ロット数 初期0
+    const zaiko = stock - demand;                  // 差引在庫 初期=有効在庫-見込計
+    const lotCell = (lot!=null && !isNaN(lot)) ? lot : '';
+    ir.push([lotCell,N],[req,N],[zaiko,N]);
+    // 非表示 初期値列（変更検出用のベースライン）
+    ir.push([lotCell,N],[req,N],[zaiko,N]);
+    rows.push(ir);
   });
-  const cols=[12,46]; if(showTanto) cols.push(16); for(let i=0;i<ed.months.length+3;i++) cols.push(10.5);
-  return {name:'製造必要数(製品別)', rows, cols, freeze:{r:3, c:showTanto?3:2}};
+
+  // 列幅: 品番, 製品, [担当者], months, 見込計, 有効在庫, 要製造数, 製造ロット, 依頼ロット数, 差引在庫, +初期値3列
+  const cols=[12,46]; if(showTanto) cols.push(16);
+  for(let i=0;i<ed.months.length;i++) cols.push(10.5);
+  cols.push(10.5,10.5,10.5);   // 見込計/有効在庫/要製造数
+  cols.push(11,12,11);         // 製造ロット / 依頼ロット数 / 差引在庫
+  cols.push(11,12,11);         // 初期値3列（非表示だが幅は保持）
+
+  // 非表示列: 末尾3列 (初期値)
+  const totalCols = cols.length;
+  const hiddenCols = [totalCols-3, totalCols-2, totalCols-1];
+
+  // 条件付き書式（編集列 A が 初期値 B と異なる場合に薄緑）
+  const firstDataRow = 4;              // タイトル/サブ/空/ヘッダ → データ開始行
+  const lastDataRow  = rows.length;    // 現在行数
+  const edCol1 = totalCols-6, edCol2 = totalCols-5, edCol3 = totalCols-4;
+  const initCol1 = totalCols-3, initCol2 = totalCols-2, initCol3 = totalCols-1;
+  const cfRules=[];
+  if(lastDataRow>=firstDataRow){
+    const L1=colLetter(edCol1), L2=colLetter(edCol2), L3=colLetter(edCol3);
+    const B1=colLetter(initCol1), B2=colLetter(initCol2), B3=colLetter(initCol3);
+    const rng=(c)=>`${c}${firstDataRow}:${c}${lastDataRow}`;
+    cfRules.push({sqref:rng(L1), formula:`${L1}${firstDataRow}<>${B1}${firstDataRow}`});
+    cfRules.push({sqref:rng(L2), formula:`${L2}${firstDataRow}<>${B2}${firstDataRow}`});
+    cfRules.push({sqref:rng(L3), formula:`${L3}${firstDataRow}<>${B3}${firstDataRow}`});
+  }
+
+  return {name:'製造必要数(製品別)', rows, cols, freeze:{r:3, c:showTanto?3:2}, hiddenCols, cfRules};
 }
 
 // ---- 依存ライブラリ無しの最小XLSXライター（store方式ZIP）----
@@ -734,13 +775,16 @@ const STYLES_XML='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
 '<xf numFmtId="164" fontId="0" fillId="6" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
 '<xf numFmtId="164" fontId="0" fillId="8" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
 '<xf numFmtId="164" fontId="0" fillId="7" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf>'+
-'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'+
+'<dxfs count="1"><dxf><fill><patternFill patternType="solid"><bgColor rgb="FFD8F0D3"/></patternFill></fill></dxf></dxfs>'+
+'</styleSheet>';
 // 行ステータス→[ラベルstyle, 数値style]（''=既定 / new=青 / warn=黄 / short=赤）
 function stStyles(s){ return s==='short'?[19,22] : s==='new'?[18,20] : s==='warn'?[17,21] : [8,9]; }
 
 function sheetXml(sheet){
   const w=sheet.cols||[];
-  const cols=w.length? '<cols>'+w.map((x,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+x+'" customWidth="1"/>').join('')+'</cols>' : '';
+  const hidden=new Set(sheet.hiddenCols||[]);      // 非表示列 (0-based)
+  const cols=w.length? '<cols>'+w.map((x,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+x+'" customWidth="1"'+(hidden.has(i)?' hidden="1"':'')+'/>').join('')+'</cols>' : '';
   let sd='';
   sheet.rows.forEach((cells,ri)=>{
     const r=ri+1;
@@ -748,7 +792,8 @@ function sheetXml(sheet){
     let cc='';
     cells.forEach((cell,ci)=>{
       const v=cell[0], s=cell[1], ref=colLetter(ci)+r;
-      if(typeof v==='number') cc+='<c r="'+ref+'" s="'+s+'"><v>'+Math.round(v)+'</v></c>';
+      if(v==='' || v==null){ cc+='<c r="'+ref+'" s="'+s+'"/>'; }
+      else if(typeof v==='number') cc+='<c r="'+ref+'" s="'+s+'"><v>'+Math.round(v)+'</v></c>';
       else cc+='<c r="'+ref+'" s="'+s+'" t="inlineStr"><is><t xml:space="preserve">'+xmlEsc(v)+'</t></is></c>';
     });
     sd+='<row r="'+r+'">'+cc+'</row>';
@@ -759,9 +804,14 @@ function sheetXml(sheet){
     const fr=sheet.freeze.r||0, fc=sheet.freeze.c||0, tl=colLetter(fc)+(fr+1);
     views='<sheetViews><sheetView workbookViewId="0"><pane'+(fc?' xSplit="'+fc+'"':'')+(fr?' ySplit="'+fr+'"':'')+' topLeftCell="'+tl+'" activePane="bottomRight" state="frozen"/><selection pane="bottomRight" activeCell="'+tl+'" sqref="'+tl+'"/></sheetView></sheetViews>';
   }
+  // 条件付き書式（cfRules: [{sqref, formula}]）
+  let cf='';
+  (sheet.cfRules||[]).forEach(rule=>{
+    cf+='<conditionalFormatting sqref="'+rule.sqref+'"><cfRule type="expression" dxfId="0" priority="1"><formula>'+xmlEsc(rule.formula)+'</formula></cfRule></conditionalFormatting>';
+  });
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
-    views+cols+'<sheetData>'+sd+'</sheetData></worksheet>';
+    views+cols+'<sheetData>'+sd+'</sheetData>'+cf+'</worksheet>';
 }
 
 function buildXlsxFiles(sheets){
