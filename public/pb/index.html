@@ -685,9 +685,7 @@ function holidaySheet(ed, showTanto){
 
   const arr=items.map(it=>{ const demand=futM.reduce((s,mo)=>s+(it.m[mo]||0),0); const stock=STOCK[it.hinban]||0; return {it,demand,stock,need:Math.max(0,demand-stock)};})
     // 終売品(標準ロット〇) と 削除対象(overrides) は常に除外
-    .filter(x=> !PRODENDED[x.it.hinban] && !x.it.ended && !PRODEXCL[x.it.hinban])
-    // 選択月内実績/需要/在庫が無くても、前年度に実績がある(標準ロット掲載品)なら表示
-    .filter(x=> x.demand>0||x.stock>0||ed.months.some(mo=>x.it.m[mo]) || (ACT[x.it.hinban] && ACT[x.it.hinban].prev>0));
+    .filter(x=> !PRODENDED[x.it.hinban] && !x.it.ended && !PRODEXCL[x.it.hinban]);
   arr.sort((a,b)=> statusRank(a.it.hinban,a.need)-statusRank(b.it.hinban,b.need) || b.need-a.need || b.demand-a.demand);
 
   // 列位置計算（0-based）
