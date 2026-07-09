@@ -285,6 +285,16 @@ const sel = { tanto:new Set(), k:new Set(), months:new Set(), pSearch:"", kSearc
 const STOCK = D.stock || {};
 const PRODTANTO = D.prodTanto || {};   // 品番→製造担当（標準ロットの正）
 const PRODLOT   = D.prodLot   || {};   // 品番→標準ロット(cs)（未記載は無し）
+const PRODNOTE  = D.prodNote  || {};   // 品番→標準ロット備考（月産/月産計画/委託/等）
+// 月産品_委託品 判定：canon(品番)が'8'始まり → 委託品／備考=月産or月産計画 → 該当値／委託 → 委託品
+function tuiitakuLabel(hinban){
+  const c=String(hinban).replace(/^0+/,'')||'0';
+  if(c.charAt(0)==='8') return '委託品';
+  const n=PRODNOTE[hinban]||'';
+  if(n==='月産'||n==='月産計画') return n;
+  if(n==='委託') return '委託品';
+  return '';
+}
 
 document.getElementById('meta').textContent =
   `更新: ${D.generated} ／ 月レンジ ${D.months[0]}〜${D.months[D.months.length-1]} ／ 全${D.records.length}明細`;
@@ -644,66 +654,84 @@ function holidaySheet(ed, showTanto){
   const items=consolidateByHinban(hin, ed.months);
   const futM=ed.months.filter(isFuture);
   const rows=[];
+  // タイトル3行
   rows.push([['長期連休前 製造必要数（製品ごと・支店全体）　※不足=赤/新規(前年なし直近あり)=青/前年あり直近3か月0=黄',10]]);
-  rows.push([['対象期間: '+ymLabel(ed.months[0])+'〜'+ymLabel(ed.months[ed.months.length-1])+'　／　差引月(見込): '+(futM.map(ymLabel).join('・')||'なし')+'　／　更新: '+D.generated+'　／　製造ロット・依頼ロット数・差引在庫を編集すると初期値との差が薄緑で表示されます。リセット：右の非表示列(初期値)を再表示して編集列をコピー貼付。',0]]);
+  rows.push([['対象期間: '+ymLabel(ed.months[0])+'〜'+ymLabel(ed.months[ed.months.length-1])+'　／　差引月(見込): '+(futM.map(ymLabel).join('・')||'なし')+'　／　更新: '+D.generated,0]]);
+  rows.push([['依頼ロット数=IFERROR(要製造数/製造ロット,"")／差引在庫=IFERROR((製造ロット×依頼ロット数)-要製造数,"")　編集列を上書き入力すると薄緑ハイライト。【リセット】シート右上のオレンジ「リセット」を右クリック→マクロ実行(またはY〜AF列の初期値列を再表示して編集列をコピー→初期値列に値貼付)',0]]);
+
+  // ヘッダ（テンプレ準拠）
   const hdr=[['品番',2],['製品',2]];
   if(showTanto) hdr.push(['担当者',2]);
   ed.months.forEach(mo=>hdr.push([ymLabel(mo)+(isFuture(mo)?'(前年)':''), isFuture(mo)?14:3]));
   hdr.push(['見込計',3],['有効在庫',3],['要製造数',3]);
   hdr.push(['製造ロット',3],['依頼ロット数',3],['差引在庫',3]);
-  // 非表示 初期値列
+  hdr.push(['月産品_委託品',3],['製造日',3],['確認欄',3],['削除対象',3],['備考',3]);
+  // 非表示 初期値列（8列）
   hdr.push(['製造ロット(初期)',3],['依頼ロット数(初期)',3],['差引在庫(初期)',3]);
+  hdr.push(['月産品_委託品(初期)',3],['製造日(初期)',3],['確認欄(初期)',3],['削除対象(初期)',3],['備考(初期)',3]);
   rows.push(hdr);
 
   const arr=items.map(it=>{ const demand=futM.reduce((s,mo)=>s+(it.m[mo]||0),0); const stock=STOCK[it.hinban]||0; return {it,demand,stock,need:Math.max(0,demand-stock)};})
     .filter(x=> x.demand>0||x.stock>0||ed.months.some(mo=>x.it.m[mo]));
   arr.sort((a,b)=> statusRank(a.it.hinban,a.need)-statusRank(b.it.hinban,b.need) || b.need-a.need || b.demand-a.demand);
+
+  // 列位置計算（0-based）
+  const cLot     = 2 + (showTanto?1:0) + ed.months.length + 2; // 見込計/有効在庫/要製造数の直後(製造ロット)
+  const cNeedCol = cLot - 1;    // 要製造数
+  const cReq     = cLot + 1;    // 依頼ロット数
+  const cZai     = cLot + 2;    // 差引在庫
+
   arr.forEach(({it,demand,stock,need})=>{
     const st=rowStatus(it.hinban, need);
     const [L,N]=stStyles(st);                       // 行全体を色分け
     const fN=mo=> st? N : (isFuture(mo)?15:9);       // 既定行のみ未来月は青
+    const rn = rows.length+1;                       // このセル行のExcel行番号(1-based)
     const ir=[[it.hinban,L],[it.hinmei+(it.ended?' [終売]':''),L]];
     if(showTanto) ir.push([(PRODTANTO[it.hinban]||'－').replace(/　/g,' '),L]);
     ed.months.forEach(mo=>ir.push([it.m[mo]||0, fN(mo)]));
     ir.push([demand,N],[stock,N],[need, need>0?16:N]);
-    // 編集列（初期値）
-    const lot = PRODLOT[it.hinban];              // 未記載は空欄
-    const req = 0;                                 // 依頼ロット数 初期0
-    const zaiko = stock - demand;                  // 差引在庫 初期=有効在庫-見込計
+
+    // 編集列（数式・値）
+    const lot = PRODLOT[it.hinban];
     const lotCell = (lot!=null && !isNaN(lot)) ? lot : '';
-    ir.push([lotCell,N],[req,N],[zaiko,N]);
-    // 非表示 初期値列（変更検出用のベースライン）
-    ir.push([lotCell,N],[req,N],[zaiko,N]);
+    const need_ref = colLetter(cNeedCol)+rn;
+    const lot_ref  = colLetter(cLot)+rn;
+    const req_ref  = colLetter(cReq)+rn;
+    const fReq  = `=IFERROR(${need_ref}/${lot_ref},"")`;
+    const fZai  = `=IFERROR((${lot_ref}*${req_ref})-${need_ref},"")`;
+    const tuii  = tuiitakuLabel(it.hinban);
+    ir.push([lotCell,N],[fReq,N],[fZai,N],[tuii,N],['',N],['',N],['',N],['',N]);
+    // 非表示 初期値列（同じ値・同じ数式）→ 変更検出のベースライン
+    ir.push([lotCell,N],[fReq,N],[fZai,N],[tuii,N],['',N],['',N],['',N],['',N]);
     rows.push(ir);
   });
 
-  // 列幅: 品番, 製品, [担当者], months, 見込計, 有効在庫, 要製造数, 製造ロット, 依頼ロット数, 差引在庫, +初期値3列
+  // 列幅
   const cols=[12,46]; if(showTanto) cols.push(16);
   for(let i=0;i<ed.months.length;i++) cols.push(10.5);
-  cols.push(10.5,10.5,10.5);   // 見込計/有効在庫/要製造数
-  cols.push(11,12,11);         // 製造ロット / 依頼ロット数 / 差引在庫
-  cols.push(11,12,11);         // 初期値3列（非表示だが幅は保持）
+  cols.push(10.5,10.5,10.5);       // 見込計/有効在庫/要製造数
+  cols.push(11,12,11,14,10,10,10,20); // 製造ロット,依頼ロット数,差引在庫,月産品委託品,製造日,確認欄,削除対象,備考
+  cols.push(11,12,11,14,10,10,10,20); // 初期値列（非表示・幅保持）
 
-  // 非表示列: 末尾3列 (初期値)
   const totalCols = cols.length;
-  const hiddenCols = [totalCols-3, totalCols-2, totalCols-1];
+  // 非表示列: 末尾8列
+  const hiddenCols=[];
+  for(let i=totalCols-8;i<totalCols;i++) hiddenCols.push(i);
 
-  // 条件付き書式（編集列 A が 初期値 B と異なる場合に薄緑）
-  const firstDataRow = 4;              // タイトル/サブ/空/ヘッダ → データ開始行
-  const lastDataRow  = rows.length;    // 現在行数
-  const edCol1 = totalCols-6, edCol2 = totalCols-5, edCol3 = totalCols-4;
-  const initCol1 = totalCols-3, initCol2 = totalCols-2, initCol3 = totalCols-1;
+  // 条件付き書式（編集列 8列 それぞれが 対応する初期値列 と異なる場合に薄緑）
+  const firstDataRow = 5;              // タイトル×3+ヘッダ → 5行目から
+  const lastDataRow  = rows.length;
   const cfRules=[];
   if(lastDataRow>=firstDataRow){
-    const L1=colLetter(edCol1), L2=colLetter(edCol2), L3=colLetter(edCol3);
-    const B1=colLetter(initCol1), B2=colLetter(initCol2), B3=colLetter(initCol3);
-    const rng=(c)=>`${c}${firstDataRow}:${c}${lastDataRow}`;
-    cfRules.push({sqref:rng(L1), formula:`${L1}${firstDataRow}<>${B1}${firstDataRow}`});
-    cfRules.push({sqref:rng(L2), formula:`${L2}${firstDataRow}<>${B2}${firstDataRow}`});
-    cfRules.push({sqref:rng(L3), formula:`${L3}${firstDataRow}<>${B3}${firstDataRow}`});
+    const editStart = totalCols-16;
+    for(let k=0;k<8;k++){
+      const eC = colLetter(editStart+k);
+      const iC = colLetter(editStart+8+k);
+      cfRules.push({sqref:`${eC}${firstDataRow}:${eC}${lastDataRow}`, formula:`${eC}${firstDataRow}<>${iC}${firstDataRow}`});
+    }
   }
 
-  return {name:'製造必要数(製品別)', rows, cols, freeze:{r:3, c:showTanto?3:2}, hiddenCols, cfRules};
+  return {name:'製造必要数(製品別)', rows, cols, freeze:{r:4, c:showTanto?3:2}, hiddenCols, cfRules};
 }
 
 // ---- 依存ライブラリ無しの最小XLSXライター（store方式ZIP）----
@@ -793,6 +821,10 @@ function sheetXml(sheet){
     cells.forEach((cell,ci)=>{
       const v=cell[0], s=cell[1], ref=colLetter(ci)+r;
       if(v==='' || v==null){ cc+='<c r="'+ref+'" s="'+s+'"/>'; }
+      else if(typeof v==='string' && v.charAt(0)==='='){
+        // 数式セル
+        cc+='<c r="'+ref+'" s="'+s+'"><f>'+xmlEsc(v.substring(1))+'</f></c>';
+      }
       else if(typeof v==='number') cc+='<c r="'+ref+'" s="'+s+'"><v>'+Math.round(v)+'</v></c>';
       else cc+='<c r="'+ref+'" s="'+s+'" t="inlineStr"><is><t xml:space="preserve">'+xmlEsc(v)+'</t></is></c>';
     });
