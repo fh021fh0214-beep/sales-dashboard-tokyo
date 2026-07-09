@@ -676,10 +676,12 @@ function holidaySheet(ed, showTanto){
   arr.sort((a,b)=> statusRank(a.it.hinban,a.need)-statusRank(b.it.hinban,b.need) || b.need-a.need || b.demand-a.demand);
 
   // 列位置計算（0-based）
-  const cLot     = 2 + (showTanto?1:0) + ed.months.length + 2; // 見込計/有効在庫/要製造数の直後(製造ロット)
+  const cLot     = 2 + (showTanto?1:0) + ed.months.length + 3; // 見込計/有効在庫/要製造数の直後(製造ロット)
   const cNeedCol = cLot - 1;    // 要製造数
   const cReq     = cLot + 1;    // 依頼ロット数
   const cZai     = cLot + 2;    // 差引在庫
+  const cConf    = cLot + 5;    // 確認欄
+  const cDel     = cLot + 6;    // 削除対象
 
   arr.forEach(({it,demand,stock,need})=>{
     const st=rowStatus(it.hinban, need);
@@ -731,7 +733,15 @@ function holidaySheet(ed, showTanto){
     }
   }
 
-  return {name:'製造必要数(製品別)', rows, cols, freeze:{r:4, c:showTanto?3:2}, hiddenCols, cfRules};
+  // データ検証（プルダウン: 〇）— 確認欄・削除対象
+  const dv=[];
+  if(lastDataRow>=firstDataRow){
+    const cc = colLetter(cConf), dc = colLetter(cDel);
+    dv.push({sqref:`${cc}${firstDataRow}:${cc}${lastDataRow}`, list:['〇']});
+    dv.push({sqref:`${dc}${firstDataRow}:${dc}${lastDataRow}`, list:['〇']});
+  }
+
+  return {name:'製造必要数(製品別)', rows, cols, freeze:{r:4, c:showTanto?3:2}, hiddenCols, cfRules, dv};
 }
 
 // ---- 依存ライブラリ無しの最小XLSXライター（store方式ZIP）----
@@ -841,9 +851,20 @@ function sheetXml(sheet){
   (sheet.cfRules||[]).forEach(rule=>{
     cf+='<conditionalFormatting sqref="'+rule.sqref+'"><cfRule type="expression" dxfId="0" priority="1"><formula>'+xmlEsc(rule.formula)+'</formula></cfRule></conditionalFormatting>';
   });
+  // データ検証（dropdown）: sheet.dv = [{sqref, list:['〇']}, ...]
+  let dv='';
+  const dvs = sheet.dv||[];
+  if(dvs.length){
+    dv='<dataValidations count="'+dvs.length+'">';
+    dvs.forEach(v=>{
+      dv+='<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="'+v.sqref+'"><formula1>"'+v.list.join(',')+'"</formula1></dataValidation>';
+    });
+    dv+='</dataValidations>';
+  }
+  // XML内の要素順: sheetViews, cols, sheetData, conditionalFormatting, dataValidations
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
-    views+cols+'<sheetData>'+sd+'</sheetData>'+cf+'</worksheet>';
+    views+cols+'<sheetData>'+sd+'</sheetData>'+cf+dv+'</worksheet>';
 }
 
 function buildXlsxFiles(sheets){
