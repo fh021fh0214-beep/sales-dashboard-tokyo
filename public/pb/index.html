@@ -286,13 +286,24 @@ const STOCK = D.stock || {};
 const PRODTANTO = D.prodTanto || {};   // 品番→製造担当（標準ロットの正）
 const PRODLOT   = D.prodLot   || {};   // 品番→標準ロット(cs)（未記載は無し）
 const PRODNOTE  = D.prodNote  || {};   // 品番→標準ロット備考（月産/月産計画/委託/等）
-// 月産品_委託品 判定：canon(品番)が'8'始まり → 委託品／備考=月産or月産計画 → 該当値／委託 → 委託品
+const PRODH     = D.prodH     || {};   // 品番→標準ロットH列(月産/委託品/受注製造/一括納品/等のテキスト)
+const PRODENDED = D.prodEnded || {};   // 品番→終売フラグ
+// 月産品_委託品 判定（優先順に評価。品番8始まり/H列/備考）
 function tuiitakuLabel(hinban){
   const c=String(hinban).replace(/^0+/,'')||'0';
   if(c.charAt(0)==='8') return '委託品';
-  const n=PRODNOTE[hinban]||'';
+  const h=(PRODH[hinban]||'').trim();
+  if(h){
+    if(/月産/.test(h)) return '月産';
+    if(/委託/.test(h)) return '委託品';
+    if(/受注製造/.test(h)) return '受注製造';
+    // その他のH列テキストはそのまま表示
+    return h;
+  }
+  const n=(PRODNOTE[hinban]||'').trim();
   if(n==='月産'||n==='月産計画') return n;
   if(n==='委託') return '委託品';
+  if(n==='受注生産') return '受注製造';
   return '';
 }
 
@@ -672,7 +683,10 @@ function holidaySheet(ed, showTanto){
   rows.push(hdr);
 
   const arr=items.map(it=>{ const demand=futM.reduce((s,mo)=>s+(it.m[mo]||0),0); const stock=STOCK[it.hinban]||0; return {it,demand,stock,need:Math.max(0,demand-stock)};})
-    .filter(x=> x.demand>0||x.stock>0||ed.months.some(mo=>x.it.m[mo]));
+    // 終売品(標準ロット〇=削除対象)は常に除外
+    .filter(x=> !PRODENDED[x.it.hinban] && !x.it.ended)
+    // 選択月内実績/需要/在庫が無くても、前年度に実績がある(標準ロット掲載品)なら表示
+    .filter(x=> x.demand>0||x.stock>0||ed.months.some(mo=>x.it.m[mo]) || (ACT[x.it.hinban] && ACT[x.it.hinban].prev>0));
   arr.sort((a,b)=> statusRank(a.it.hinban,a.need)-statusRank(b.it.hinban,b.need) || b.need-a.need || b.demand-a.demand);
 
   // 列位置計算（0-based）
